@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guide — darkvessel</title>
+<meta name="description" content="A two-minute tour of the darkvessel viewer: what each control does, what each status means, and five one-click scenarios.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🛰️</text></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="doc-page">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <a class="brand" href="./" style="text-decoration:none;color:inherit">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <div>
+      <p style="margin:0;font-size:16px;font-weight:600;letter-spacing:-0.02em">darkvessel</p>
+      <p class="brand-sub">Sentinel-1 SAR fused with AIS declarations</p>
+    </div>
+  </a>
+  <nav class="site-nav" aria-label="Site">
+    <a href="./">Viewer</a>
+    <a href="guide.html" aria-current="page">Guide</a>
+    <a href="about.html">How it works</a>
+  </nav>
+</header>
+
+<main class="doc" id="main">
+  <div class="doc-hero">
+    <p class="doc-kicker">Guide</p>
+    <h1>Find out why a vessel was reported dark</h1>
+    <p class="doc-lede">Ships must broadcast their position over AIS. Radar sees them whether they
+      do or not. The viewer puts one radar scene next to what AIS declared at the moment it was
+      taken, and shows, for every vessel it found, what explains it or what doesn't.</p>
+  </div>
+
+  <ul class="toc" aria-label="On this page">
+    <li><a href="#tour">Five-step tour</a></li>
+    <li><a href="#statuses">The four statuses</a></li>
+    <li><a href="#controls">Controls</a></li>
+    <li><a href="#shortcuts">Keyboard</a></li>
+    <li><a href="#faq">FAQ</a></li>
+    <li><a href="#run">Run it yourself</a></li>
+  </ul>
+
+  <h2 id="tour">Five-step tour</h2>
+  <p>Each step opens the viewer already set up to show one behaviour. The scene is a synthetic
+    fixture built so that each of its five vessels takes a different path through the
+    pipeline.</p>
+
+  <ol class="steps">
+    <li>
+      <h3>Read a verdict</h3>
+      <p>Select any box on the scene or row in the table. The inspector on the right says, in
+        words, which declaration explained it, how far apart they were, and what the position
+        rests on. Detection 2's position was <em>interpolated</em> between two reports. Its
+        nearest single report sits about 900 m away, far enough on its own to call it dark.</p>
+      <p><a class="try" href="./?select=2">Open detection 2 →</a></p>
+    </li>
+    <li>
+      <h3>Switch off the azimuth correction</h3>
+      <p>Radar draws a moving ship displaced along the satellite's track. The dashed orange
+        line shows that shift. Turn the correction off and detection 3, the fast vessel,
+        falls out of tolerance: 4 matched / 1 dark becomes 3 matched / 2 dark.</p>
+      <p><a class="try" href="./?az=0&amp;select=3">See detection 3 go dark →</a></p>
+    </li>
+    <li>
+      <h3>See why the dark vessel stays dark</h3>
+      <p>Detection 5 has a declaration only 170 m away, inside the 200 m tolerance. It's still
+        dark because matching is one-to-one: that declaration fits detection 4 better (30 m).
+        A greedy matcher that let one declaration explain two ships would hide this vessel.</p>
+      <p><a class="try" href="./?select=5">Open detection 5 →</a></p>
+    </li>
+    <li>
+      <h3>Tighten the tolerance</h3>
+      <p>At 25 m, detection 4's declaration (about 30 m off) no longer counts. A dark count
+        always comes with the tolerance it was measured at, and the table and inspector
+        both show it.</p>
+      <p><a class="try" href="./?tol=25&amp;select=4">Try a 25 m tolerance →</a></p>
+    </li>
+    <li>
+      <h3>Register a fixed structure</h3>
+      <p>Turbines and platforms show up on every pass. Select <em>Register by clicking the
+        scene</em>, then click a dark detection. It turns <em>structure</em>, and no matched
+        vessel is ever touched: structure exclusion runs after matching.</p>
+      <p><a class="try" href="./?reg=500900.0,6100900.0&amp;select=5">Register one under detection 5 →</a></p>
+    </li>
+  </ol>
+
+  <h2 id="statuses">The four statuses</h2>
+  <div class="status-grid">
+    <div class="status-card" style="--c: var(--matched)">
+      <h3>Matched</h3>
+      <p>A declaration, placed at the acquisition instant, explains this detection within
+        the tolerance.</p>
+    </div>
+    <div class="status-card" style="--c: var(--dark)">
+      <h3>Dark</h3>
+      <p>AIS was searched and nothing explains it. This is a claim about the evidence
+        searched, not a verdict about the ship.</p>
+    </div>
+    <div class="status-card" style="--c: var(--structure)">
+      <h3>Structure</h3>
+      <p>It stands on a registered fixed position, so it isn't counted as a vessel. Only
+        dark detections can become structures.</p>
+    </div>
+    <div class="status-card" style="--c: var(--unsearched)">
+      <h3>Unsearched</h3>
+      <p>No AIS archive was supplied, so nobody tried to explain it. Missing data is never
+        reported as dark.</p>
+    </div>
+  </div>
+
+  <h2 id="controls">Controls</h2>
+  <h3>Match tolerance</h3>
+  <p>How far a declared position may sit from a detection and still explain it. Lower is
+    stricter and reports more dark vessels.</p>
+  <h3>Max AIS gap</h3>
+  <p>How old a lone report may be and still place a vessel. Beyond it the vessel isn't placed
+    at all, so it can't explain anything. Reports that bracket the acquisition are always
+    interpolated.</p>
+  <h3>Azimuth-shift correction</h3>
+  <p>Moves each declaration to where the radar would have drawn that vessel, given its speed,
+    before matching.</p>
+  <h3>Brightness threshold</h3>
+  <p>The stand-in detector's cut-off. Lower finds fainter targets. A trained detector would
+    replace this.</p>
+  <h3>Structure register</h3>
+  <p>Known fixed positions, such as a turbine list. A dark detection within the
+    same-position tolerance of one becomes a structure.</p>
+  <h3>Counts, table, Share and export</h3>
+  <p>Click a count card to filter the scene and table to that status. <em>Share</em> copies a
+    link that reopens the exact view: every control, every registered position and the
+    selected detection. <em>CSV</em> and <em>JSON</em> download the current run.</p>
+
+  <h2 id="shortcuts">Keyboard</h2>
+  <table class="shortcuts">
+    <thead><tr><th scope="col">Key</th><th scope="col">Where</th><th scope="col">Does</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>Tab</kbd></td><td>anywhere</td><td>Move between controls, detections on the scene, and table rows</td></tr>
+      <tr><td><kbd>Enter</kbd> / <kbd>Space</kbd></td><td>detection or row</td><td>Select it and open the inspector</td></tr>
+      <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>table</td><td>Move to the previous or next row</td></tr>
+      <tr><td><kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd></td><td>scene</td><td>Zoom in, zoom out, fit</td></tr>
+      <tr><td><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></td><td>scene</td><td>Pan when zoomed in</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>anywhere</td><td>Stop registering a position</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="faq">FAQ</h2>
+  <div class="faq">
+    <details>
+      <summary>Is this real satellite data?</summary>
+      <p>Not yet. The published viewer runs on a synthetic scene of five vessels, built so each
+        one exercises a different branch of the pipeline. The same code runs on a real
+        Sentinel-1 scene and a DMA AIS day file.</p>
+    </details>
+    <details>
+      <summary>The badge says "Static build". What does that mean?</summary>
+      <p>The published site has no server. When it was built, the pipeline was run for every
+        position the controls can take, and each distinct result was saved. Moving a control
+        looks up the matching run, so it responds instantly. Run it locally for a live
+        pipeline (see below). Results are identical.</p>
+    </details>
+    <details>
+      <summary>Why does max AIS gap jump in steps on the published site?</summary>
+      <p>To keep the static build small, it pre-computes a set of gap values (1 to 120
+        minutes) rather than every minute. The live server accepts any value.</p>
+    </details>
+    <details>
+      <summary>Does "dark" mean the ship is doing something illegal?</summary>
+      <p>No. It means no declaration explained the detection within the stated tolerance, from
+        the AIS the search actually had. The AIS panel shows what was searched and what
+        cleaning removed. The dark call rests on that.</p>
+    </details>
+    <details>
+      <summary>Can I share a specific finding?</summary>
+      <p>Yes. Select <em>Share</em> above the scene. The link restores the controls, the register
+        and the selected detection.</p>
+    </details>
+  </div>
+
+  <h2 id="run">Run it yourself</h2>
+  <p>No credentials, weights, GPU or network needed:</p>
+<pre><code>pip install -e ".[web]"
+darkvessel synthesise --out data/synthetic
+darkvessel serve --config configs/pipeline.yaml    # live, at http://127.0.0.1:8000</code></pre>
+  <p>To publish your own static copy, <code>darkvessel render --config configs/pipeline.yaml
+    --out site</code> writes a folder any static host can serve.</p>
+
+  <footer class="doc-foot">
+    <a href="./">← Back to the viewer</a>
+    <a href="about.html">How it works →</a>
+    <a href="https://github.com/priyansh-koli/DarkVessel">Source on GitHub</a>
+  </footer>
+</main>
+</body>
+</html>

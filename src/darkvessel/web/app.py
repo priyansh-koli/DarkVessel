@@ -1,8 +1,8 @@
 """The live viewer: FastAPI over `pipeline.run`, re-running the chain per request.
 
-The scene and its AIS archive are read once at startup; only the pipeline re-runs, so moving
-a tolerance slider costs a detection pass rather than a file read. Everything the frontend
-needs arrives as one JSON payload — see `web.payload`.
+The scene and its AIS archive are read, and the archive cleaned, once at startup; detection is
+cached per detector setting, so moving a fusion control re-runs only matching. Everything the
+frontend needs arrives as one JSON payload — see `web.payload`.
 """
 
 from __future__ import annotations
@@ -12,12 +12,14 @@ from pathlib import Path
 
 import geopandas as gpd
 from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from darkvessel import config as config_module
 from darkvessel.data.scene import read_scene
+from darkvessel.embed.structures import SAME_POSITION_M
 from darkvessel.render import scene_png
-from darkvessel.web.payload import RunRequest, build
+from darkvessel.web.payload import RunRequest, Viewer
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -26,13 +28,26 @@ def create_app(config_path: str | Path) -> FastAPI:
     cfg = config_module.load(config_path)
     scene = read_scene(cfg.scene_dir)
     ais = gpd.read_file(cfg.ais_path) if cfg.ais_path else None
+    viewer = Viewer(scene, ais)
     png = scene_png(scene.image)
 
     app = FastAPI(title="darkvessel", docs_url="/api/docs", openapi_url="/api/openapi.json")
+    # A payload is mostly repeated keys and base64 crops; it compresses several-fold.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+    defaults = {
+        "tolerance_m": cfg.tolerance_m,
+        "max_gap_minutes": cfg.max_gap.total_seconds() / 60,
+        "detector_threshold": cfg.detector_threshold,
+        "apply_azimuth": cfg.geometry is not None,
+        "register_tolerance_m": SAME_POSITION_M,
+    }
 
     @app.get("/api/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok", "scene": scene.id}
+    def health() -> dict:
+        # `defaults` is what Reset returns the controls to: the run configuration, not
+        # whatever the page's markup happens to say.
+        return {"status": "ok", "scene": scene.id, "defaults": defaults}
 
     @app.get("/api/scene.png")
     def scene_image() -> Response:
@@ -49,11 +64,9 @@ def create_app(config_path: str | Path) -> FastAPI:
         detector_threshold: float = Query(cfg.detector_threshold, ge=0.0, le=1000.0),
         apply_azimuth: bool = Query(cfg.geometry is not None),
         register: list[str] = Query(default=[]),
-        register_tolerance_m: float = Query(100.0, ge=1.0, le=5000.0),
+        register_tolerance_m: float = Query(defaults["register_tolerance_m"], ge=1.0, le=5000.0),
     ) -> dict:
-        return build(
-            scene,
-            ais,
+        return viewer.run(
             RunRequest(
                 tolerance_m=tolerance_m,
                 max_gap_minutes=max_gap_minutes,

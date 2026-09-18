@@ -28,8 +28,8 @@ jobs:
           cache: pip
       - run: pip install -e ".[web]"
 
-      # "Generate the images before deploying": `render` writes the scene PNG and bakes one
-      # full pipeline run, with every detection crop inlined, into data/run.json.
+      # "Generate the images before deploying": `render` writes the scene PNG and bakes a run
+      # for every control position, so the published viewer's controls work with no server.
       - run: darkvessel synthesise --out data/synthetic
       - run: darkvessel render --config configs/pipeline.yaml --out site
 
@@ -38,7 +38,11 @@ jobs:
           test -f site/index.html
           test -f site/assets/scene.png
           test -f site/data/run.json
+          test -f site/guide.html
+          test -f site/about.html
+          test -f site/data/manifest.json
           python -c "import json; d=json.load(open('site/data/run.json')); assert d['counts']['total']==5, d['counts']"
+          python -c "import json, pathlib; m=json.load(open('site/data/manifest.json')); assert all(pathlib.Path(f'site/data/runs/{i}.json').exists() for i in set(m['runs'])), 'a baked run is missing'"
 
       - uses: actions/upload-pages-artifact@v3
         with:

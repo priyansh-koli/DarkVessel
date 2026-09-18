@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How it works — darkvessel</title>
+<meta name="description" content="How darkvessel fuses Sentinel-1 SAR detections with AIS declarations, and the two silent errors the design avoids.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🛰️</text></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="doc-page">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <a class="brand" href="./" style="text-decoration:none;color:inherit">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <div>
+      <p style="margin:0;font-size:16px;font-weight:600;letter-spacing:-0.02em">darkvessel</p>
+      <p class="brand-sub">Sentinel-1 SAR fused with AIS declarations</p>
+    </div>
+  </a>
+  <nav class="site-nav" aria-label="Site">
+    <a href="./">Viewer</a>
+    <a href="guide.html">Guide</a>
+    <a href="about.html" aria-current="page">How it works</a>
+  </nav>
+</header>
+
+<main class="doc" id="main">
+  <div class="doc-hero">
+    <p class="doc-kicker">How it works</p>
+    <h1>Detect every vessel in the radar scene, then subtract what AIS declared</h1>
+    <p class="doc-lede">Sentinel-1 radar sees ships through cloud and darkness. AIS says which
+      ships chose to announce themselves. Match the two at the moment the radar image was
+      taken. A detection nothing explains didn't announce itself.</p>
+  </div>
+
+  <ul class="toc" aria-label="On this page">
+    <li><a href="#pipeline">The pipeline</a></li>
+    <li><a href="#design">Four design choices</a></li>
+    <li><a href="#errors">Two errors it avoids</a></li>
+    <li><a href="#limits">What it can't yet claim</a></li>
+  </ul>
+
+  <h2 id="pipeline">The pipeline</h2>
+  <figure>
+    <img src="pipeline.svg" width="1100" height="940"
+         alt="The darkvessel pipeline: a SAR path and an AIS path prepared independently, fused by an optimal one-to-one assignment within a tolerance, then filtered through a structure register into four statuses — matched, structure, dark and unsearched.">
+    <figcaption>The SAR path and the AIS path are prepared separately and meet only at
+      fusion.</figcaption>
+  </figure>
+  <p>The two paths don't touch until the fusion step. The radar side answers <em>what is on
+    the water</em>, the AIS side answers <em>what was declared</em>, and neither influences the
+    other's preparation. After fusion, the pipeline records what each answer rests on: which
+    declarations were searched, how far it looked, and whether a position was measured or
+    inferred.</p>
+  <p>The AIS archive is cleaned before anything is matched against it. Every rule counts what it
+    removed, and the viewer's AIS panel shows those counts, because a dark call is only as good
+    as the archive that was searched.</p>
+
+  <h2 id="design">Four design choices</h2>
+  <h3>Interpolate to the acquisition instant</h3>
+  <p>A vessel at 12 knots covers about 370 m a minute, more than the match tolerance. So every
+    declaration is placed at the exact acquisition time before anything is compared, by
+    interpolating between the reports either side of it. Positions are never extrapolated
+    past the end of a track. Where no bracket exists, the nearest report is used, and the row
+    says so.</p>
+
+  <h3>Correct the azimuth shift</h3>
+  <p>Radar reads along-track position from Doppler, so a moving target is <em>drawn</em>
+    displaced along the satellite's ground track. Uncorrected, this alone puts fast vessels
+    hundreds of metres from their detections and reports them dark. The viewer draws the
+    correction as a dashed line from the declared position to the corrected one.</p>
+
+  <h3>Deduplicate tiles by ownership</h3>
+  <p>A scene is processed in overlapping tiles, so targets near an edge are seen twice. Merging
+    duplicates afterwards would need a radius to tune and could merge two genuinely close
+    hulls. Instead, each tile owns a non-overlapping core and reports only what falls inside
+    it. Every target is claimed exactly once, by construction.</p>
+
+  <h3>Exclude structures by recurrence</h3>
+  <p>A position with a detection on pass after pass isn't a ship. This needs no labels and no
+    appearance model, only provenance. It runs strictly after matching, so a vessel AIS
+    explains is never reclassified.</p>
+
+  <h2 id="errors">Two errors it avoids</h2>
+  <h3>1. Greedy matching reports explainable vessels as dark</h3>
+  <p>Sorting every detection–declaration pair by distance and claiming the closest first
+    doesn't find the most matches. At a 100 m tolerance:</p>
+  <table class="shortcuts" style="max-width:360px">
+    <thead><tr><th scope="col"></th><th scope="col">A1</th><th scope="col">A2</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">D1</th><td>90 m</td><td>95 m</td></tr>
+      <tr><th scope="row">D2</th><td>98 m</td><td>283 m ✗</td></tr>
+    </tbody>
+  </table>
+  <p>Greedy takes D1–A1 at 90 m and strands D2, which gets reported dark, even though D1–A2
+    plus D2–A1 explains both. This happens <em>more</em> often in busy shipping lanes, exactly
+    where such studies are sited. darkvessel solves it as an optimal assignment problem.</p>
+
+  <h3>2. Structure clustering that depends on row order</h3>
+  <p>Grouping recurring detections by greedy seed-and-claim gives different answers for
+    different row orders of the same archive. Take three positions A–B 90 m apart, B–C 90 m,
+    A–C 180 m, at a 100 m tolerance. One order gives two groups, another gives one. Whether
+    something counts as a structure would depend on how the file was sorted. darkvessel uses
+    connected components instead, which give the same answer for every order.</p>
+
+  <h2 id="limits">What it can't yet claim</h2>
+  <div class="callout">
+    <p>The published viewer runs on a <strong>synthetic scene</strong> with a deterministic
+      stand-in detector. It shows that the reasoning is right, not that the detector is good.
+      The next steps are one real Sentinel-1 scene with its matching DMA AIS day file, then a
+      trained detector.</p>
+  </div>
+  <p>Where results are modest, they should be reported as modest. A detector that usefully
+    <em>ranks</em> candidates for inspection is a different, more honest claim than one that
+    maps them.</p>
+
+  <footer class="doc-foot">
+    <a href="./">← Back to the viewer</a>
+    <a href="guide.html">Guide</a>
+    <a href="https://github.com/priyansh-koli/DarkVessel">Source on GitHub</a>
+  </footer>
+</main>
+</body>
+</html>

@@ -20,6 +20,12 @@
     </div>
   </div>
 
+  <nav class="site-nav" aria-label="Site">
+    <a href="./" aria-current="page">Viewer</a>
+    <a href="guide.html">Guide</a>
+    <a href="about.html">How it works</a>
+  </nav>
+
   <dl class="scene-meta" id="scene-meta" aria-label="Scene metadata"></dl>
 
   <div class="mode" id="mode-badge" role="status">
@@ -37,6 +43,7 @@
   <aside class="col col-controls" aria-label="Run controls">
     <section class="panel">
       <h2 class="panel-title">Fusion</h2>
+      <p class="hint hint-block static-note" id="static-note" hidden></p>
 
       <div class="field">
         <label for="tolerance">Match tolerance</label>
@@ -117,11 +124,13 @@
         <span class="num zoom-level" id="zoom-level" aria-live="off">100%</span>
         <button type="button" class="icon-btn" id="zoom-in" aria-label="Zoom in">+</button>
         <button type="button" class="icon-btn icon-btn-wide" id="zoom-reset">Fit</button>
+        <button type="button" class="icon-btn icon-btn-wide" id="copy-link"
+                title="Copy a link that reopens this exact view">Share</button>
       </div>
     </div>
 
     <div class="stage" id="viewer" tabindex="0" role="application"
-         aria-label="SAR scene with detection overlay. Drag to pan, scroll to zoom, Tab to reach detections.">
+         aria-label="SAR scene with detection overlay. Scroll or press plus to zoom, drag or use arrow keys to pan, Tab to reach detections.">
       <div class="stage-inner" id="stage-inner">
         <canvas id="scene-canvas" aria-hidden="true"></canvas>
         <svg id="overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
@@ -140,7 +149,15 @@
     </ul>
 
     <section class="panel panel-table">
-      <h2 class="panel-title">Detections <span class="count-hint" id="table-count"></span></h2>
+      <div class="panel-head">
+        <h2 class="panel-title">Detections <span class="count-hint" id="table-count"></span></h2>
+        <div class="viewer-tools">
+          <button type="button" class="icon-btn icon-btn-wide" id="export-csv"
+                  title="Download the detections as CSV">CSV</button>
+          <button type="button" class="icon-btn icon-btn-wide" id="export-json"
+                  title="Download the whole run as JSON">JSON</button>
+        </div>
+      </div>
       <div class="table-wrap">
         <table id="detections-table">
           <caption class="sr-only">Every detection in the scene, with how it was classified.</caption>
@@ -167,6 +184,8 @@
     </section>
   </aside>
 </main>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="app.js"></script>
 </body>

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import datetime, timedelta
+from functools import cache
 
 import geopandas as gpd
 import numpy as np
@@ -119,10 +120,14 @@ def _drawn_by_the_radar(declared: gpd.GeoDataFrame, geometry: Geometry | None) -
 
 def _latitude_of(positions: gpd.GeoDataFrame) -> float:
     centre = positions.geometry.union_all().centroid
-    _, latitude = Transformer.from_crs(positions.crs, "EPSG:4326", always_xy=True).transform(
-        centre.x, centre.y
-    )
+    _, latitude = to_wgs84(str(positions.crs)).transform(centre.x, centre.y)
     return float(latitude)
+
+
+@cache
+def to_wgs84(crs: str) -> Transformer:
+    """A transformer from `crs` to lon/lat, built once: constructing one costs more than a match."""
+    return Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
 
 
 def _positions_at_acquisition(

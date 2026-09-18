@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 import geopandas as gpd
+import pandas as pd
 
 from darkvessel.context.gee_layers import without_context
 from darkvessel.data.provenance import attach_provenance
@@ -39,7 +40,34 @@ def run(
     structures: Register | None = None,
 ) -> gpd.GeoDataFrame:
     """Run the chain over one scene and return its detections, georeferenced and classified."""
-    found = detect_scene(scene.image, detector, tiling)
+    return fuse(
+        scene=scene,
+        found=detect_scene(scene.image, detector, tiling),
+        ais=ais,
+        tolerance_m=tolerance_m,
+        max_gap=max_gap,
+        geometry=geometry,
+        embedder=embedder,
+        structures=structures,
+    )
+
+
+def fuse(
+    *,
+    scene: Scene,
+    found: pd.DataFrame,
+    ais: gpd.GeoDataFrame | None,
+    tolerance_m: float,
+    max_gap: timedelta,
+    geometry: Geometry | None = None,
+    embedder: Embedder | None = None,
+    structures: Register | None = None,
+) -> gpd.GeoDataFrame:
+    """Everything after detection: `found` is `detect_scene`'s pixel detections for `scene`.
+
+    Split out because detection is the one step that reads every pixel, and none of the fusion
+    parameters change it — a caller re-running with a new tolerance can reuse `found`.
+    """
     detections = classify(
         to_ground(found, scene), ais, scene.acquired_at, tolerance_m, max_gap, geometry
     )

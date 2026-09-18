@@ -1,8 +1,12 @@
 /* darkvessel viewer.
  *
- * Two modes, one payload shape:
- *   live    — `api/run` re-runs the pipeline per control change.
- *   static  — a pre-rendered `data/run.json` from `darkvessel render`; controls are read-only.
+ * Three sources, one payload shape:
+ *   live      — `api/run` re-runs the pipeline per control change.
+ *   static    — `darkvessel render` baked every control position; `data/manifest.json` maps a
+ *               position to one of the distinct results in `data/runs/`. The structure
+ *               register is applied here, which is exact: registering only turns a dark row
+ *               into a structure, after matching (see `fusion.register`).
+ *   snapshot  — an older bundle with only `data/run.json`; controls are read-only.
  *
  * The overlay lives inside a transformed container so pan and zoom stay on the compositor.
  * Marker geometry is in scene-pixel units, restyled on zoom so a marker keeps a constant
@@ -14,14 +18,6 @@
   const $ = (id) => document.getElementById(id);
   const SVG_NS = "http://www.w3.org/2000/svg";
 
-  const DEFAULTS = {
-    tolerance: 200,
-    maxgap: 10,
-    threshold: 0.5,
-    azimuth: true,
-    registerTolerance: 100,
-  };
-
   const STATUS_TEXT = {
     matched: "Matched",
     dark: "Dark",
@@ -29,13 +25,27 @@
     unsearched: "Unsearched",
   };
 
+  /* Each slider: the request field it drives, its URL key, and how its value reads. In static
+     mode the three baked sliders step through the manifest's grid by index instead. */
+  const SLIDERS = {
+    tolerance: { key: "tolerance_m", url: "tol", baked: true, fmt: (v) => `${v} m` },
+    maxgap: { key: "max_gap_minutes", url: "gap", baked: true, fmt: (v) => `${v} min` },
+    threshold: { key: "detector_threshold", url: "thr", baked: true, fmt: (v) => Number(v).toFixed(2) },
+    "register-tolerance": { key: "register_tolerance_m", url: "regtol", baked: false, fmt: (v) => `${v} m` },
+  };
+
   const state = {
-    mode: "probing",     // probing | live | static | error
+    source: "probing",   // probing | live | static | snapshot
+    failed: false,       // the last request failed; the next change retries
+    defaults: null,      // request values Reset returns to
+    manifest: null,      // static only
+    runs: new Map(),     // static only: run id -> Promise<payload>
     payload: null,
     selected: null,      // detection index
     filter: null,        // status string or null
-    register: [],        // [{x, y}]
+    register: [],        // [{x, y}] ground coordinates
     placing: false,
+    dragged: false,      // the last pointer gesture panned, so its click is not a click
     zoom: 1,
     pan: { x: 0, y: 0 },
     base: { left: 0, top: 0, w: 0, h: 0 },
@@ -60,26 +70,22 @@
     addStructure: $("add-structure"),
     zoomLevel: $("zoom-level"),
     scalebar: $("scalebar"),
+    staticNote: $("static-note"),
+    toast: $("toast"),
   };
 
-  const controls = {
-    tolerance: $("tolerance"),
-    maxgap: $("maxgap"),
-    threshold: $("threshold"),
-    azimuth: $("azimuth"),
-    registerTolerance: $("register-tolerance"),
-  };
+  const azimuth = $("azimuth");
 
   /* ───────────────────────── formatting ───────────────────────── */
 
-  const fmtM = (v, digits = 0) =>
-    v === null || v === undefined || Number.isNaN(v) ? "—" : `${Number(v).toFixed(digits)} m`;
+  const isAbsent = (v) => v === null || v === undefined || Number.isNaN(v);
 
-  const fmtNum = (v, digits = 2) =>
-    v === null || v === undefined || Number.isNaN(v) ? "—" : Number(v).toFixed(digits);
+  const fmtM = (v, digits = 0) => (isAbsent(v) ? "—" : `${Number(v).toFixed(digits)} m`);
+
+  const fmtNum = (v, digits = 2) => (isAbsent(v) ? "—" : Number(v).toFixed(digits));
 
   const fmtSeconds = (s) => {
-    if (s === null || s === undefined || Number.isNaN(s)) return "—";
+    if (isAbsent(s)) return "—";
     if (s < 90) return `${Math.round(s)} s`;
     return `${(s / 60).toFixed(1)} min`;
   };
@@ -94,91 +100,264 @@
     String(s).replace(/[&<>"']/g, (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  /* ───────────────────────── mode + fetching ───────────────────────── */
+  const statusText = (status) => STATUS_TEXT[status] || status;
+
+  /* ───────────────────────── controls: values in both modes ───────────────────────── */
+
+  const gridFor = (id) =>
+    state.source === "static" && SLIDERS[id].baked ? state.manifest.grid[SLIDERS[id].key] : null;
+
+  function sliderValue(id) {
+    const grid = gridFor(id);
+    const raw = Number($(id).value);
+    return grid ? grid[raw] : raw;
+  }
+
+  function setSliderValue(id, value) {
+    const grid = gridFor(id);
+    $(id).value = grid ? String(nearestIndex(grid, Number(value))) : String(value);
+  }
+
+  function nearestIndex(values, target) {
+    let best = 0;
+    for (let i = 1; i < values.length; i++) {
+      if (Math.abs(values[i] - target) < Math.abs(values[best] - target)) best = i;
+    }
+    return best;
+  }
+
+  function syncOutputs() {
+    for (const [id, spec] of Object.entries(SLIDERS)) {
+      $(`${id}-out`).textContent = spec.fmt(sliderValue(id));
+    }
+  }
+
+  function request() {
+    return {
+      tolerance_m: sliderValue("tolerance"),
+      max_gap_minutes: sliderValue("maxgap"),
+      detector_threshold: sliderValue("threshold"),
+      apply_azimuth: azimuth.checked,
+      register_tolerance_m: sliderValue("register-tolerance"),
+    };
+  }
+
+  function applyRequest(values) {
+    for (const [id, spec] of Object.entries(SLIDERS)) {
+      if (values[spec.key] !== undefined) setSliderValue(id, values[spec.key]);
+    }
+    if (values.apply_azimuth !== undefined) azimuth.checked = Boolean(values.apply_azimuth);
+    syncOutputs();
+  }
+
+  function markupDefaults() {
+    const read = (id) => Number($(id).getAttribute("value"));
+    return {
+      tolerance_m: read("tolerance"),
+      max_gap_minutes: read("maxgap"),
+      detector_threshold: read("threshold"),
+      apply_azimuth: azimuth.hasAttribute("checked"),
+      register_tolerance_m: read("register-tolerance"),
+    };
+  }
+
+  /* ───────────────────────── boot: find a source ───────────────────────── */
 
   async function boot() {
     bindControls();
     bindStage();
+    bindDelegatedClicks();
     setStageState("Loading scene…");
 
     // The content-type check matters: a static host with an SPA fallback answers every
     // unknown path with 200 and an HTML page, which would otherwise look like a live API.
-    let live = false;
-    try {
-      const probe = await fetch("api/health", { cache: "no-store" });
-      live = probe.ok && (probe.headers.get("content-type") || "").includes("application/json");
-    } catch {
-      live = false;
+    const health = await fetchJson("api/health");
+    if (health) {
+      state.source = "live";
+      state.defaults = { ...markupDefaults(), ...(health.defaults || {}) };
+    } else {
+      const manifest = await fetchJson("data/manifest.json");
+      if (manifest && manifest.version === 1) {
+        state.source = "static";
+        state.manifest = manifest;
+        state.defaults = { ...markupDefaults(), ...manifest.defaults };
+        configureBakedSliders();
+      } else {
+        state.source = "snapshot";
+        state.defaults = markupDefaults();
+      }
     }
 
-    state.mode = live ? "live" : "static";
-    setMode(state.mode);
-    els.canvas.dataset.src = live ? "api/scene.png" : "assets/scene.png";
-
-    // `?select=3` deep-links a detection, so a finding can be shared as a URL.
-    const requested = Number(new URLSearchParams(window.location.search).get("select"));
-    if (Number.isInteger(requested) && requested > 0) state.selected = requested - 1;
-
+    els.canvas.dataset.src = state.source === "live" ? "api/scene.png" : "assets/scene.png";
+    applyRequest(state.defaults);
+    readUrlState();
+    setMode();
     await refresh();
   }
 
-  function setMode(mode) {
-    const badge = els.modeBadge;
-    badge.className = `mode is-${mode}`;
-    const label = badge.querySelector(".mode-label");
-    if (mode === "live") {
-      label.textContent = "Live — pipeline re-runs on change";
-    } else if (mode === "static") {
-      label.textContent = "Static build — controls read-only";
-      for (const el of Object.values(controls)) el.disabled = true;
-      els.addStructure.disabled = true;
-      $("reset").disabled = true;
-    } else {
-      label.textContent = "Cannot reach the pipeline";
+  async function fetchJson(url) {
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      const type = response.headers.get("content-type") || "";
+      return response.ok && type.includes("application/json") ? await response.json() : null;
+    } catch {
+      return null;
     }
   }
 
-  function queryString() {
-    const params = new URLSearchParams({
-      tolerance_m: controls.tolerance.value,
-      max_gap_minutes: controls.maxgap.value,
-      detector_threshold: controls.threshold.value,
-      apply_azimuth: controls.azimuth.checked ? "true" : "false",
-      register_tolerance_m: controls.registerTolerance.value,
-    });
-    for (const p of state.register) params.append("register", `${p.x},${p.y}`);
-    return params.toString();
+  /** Static mode: a baked slider steps through the grid's values by index. */
+  function configureBakedSliders() {
+    for (const id of Object.keys(SLIDERS)) {
+      const grid = gridFor(id);
+      if (!grid) continue;
+      const input = $(id);
+      input.min = "0";
+      input.max = String(grid.length - 1);
+      input.step = "1";
+    }
+    els.staticNote.hidden = false;
+    els.staticNote.innerHTML =
+      `Static build: all ${state.manifest.runs.length.toLocaleString()} control positions were
+       run ahead of time, so results are instant. Max AIS gap steps through
+       ${state.manifest.grid.max_gap_minutes.length} preset values.`;
   }
+
+  function setMode() {
+    const badge = els.modeBadge;
+    const label = badge.querySelector(".mode-label");
+    const mode = state.failed ? "error" : state.source;
+    badge.className = `mode is-${mode}`;
+    label.textContent = {
+      live: "Live — pipeline re-runs on change",
+      static: "Static build — every control pre-computed",
+      snapshot: "Snapshot — controls read-only",
+      error: "Cannot reach the pipeline",
+      probing: "connecting…",
+    }[mode];
+
+    if (state.source === "snapshot") {
+      for (const id of Object.keys(SLIDERS)) $(id).disabled = true;
+      azimuth.disabled = true;
+      els.addStructure.disabled = true;
+      $("reset").disabled = true;
+    }
+  }
+
+  /* ───────────────────────── fetching ───────────────────────── */
 
   async function refresh() {
     if (state.pending) state.pending.abort();
     const controller = new AbortController();
     state.pending = controller;
+    const busy = setTimeout(() => els.modeBadge.classList.add("is-busy"), 150);
 
     try {
-      const url = state.mode === "live" ? `api/run?${queryString()}` : "data/run.json";
-      const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-      state.payload = await response.json();
-      state.pending = null;
+      const payload = await load(controller.signal);
+      if (controller.signal.aborted) return;
+      state.payload = payload;
+      state.failed = false;
+      setMode();
       render();
+      writeUrlState();
     } catch (error) {
       if (error.name === "AbortError") return;
-      state.pending = null;
-      state.mode = "error";
-      setMode("error");
+      state.failed = true;
+      setMode();
       setStageState(
         "Could not load a run",
         state.payload
-          ? "Showing the last successful result."
+          ? "Showing the last successful result. Change a control to try again."
           : "Start the server with <code>darkvessel serve</code>, or build a static bundle with <code>darkvessel render</code>."
       );
+    } finally {
+      clearTimeout(busy);
+      if (state.pending === controller) {
+        state.pending = null;
+        els.modeBadge.classList.remove("is-busy");
+      }
     }
   }
 
+  async function load(signal) {
+    if (state.source === "live") return getJson(`api/run?${liveQuery()}`, signal);
+    if (state.source === "snapshot") return getJson("data/run.json", signal);
+    return bakedPayload(signal);
+  }
+
+  async function getJson(url, signal) {
+    const response = await fetch(url, { signal, cache: "no-store" });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return response.json();
+  }
+
+  function liveQuery() {
+    const r = request();
+    const params = new URLSearchParams({
+      tolerance_m: r.tolerance_m,
+      max_gap_minutes: r.max_gap_minutes,
+      detector_threshold: r.detector_threshold,
+      apply_azimuth: r.apply_azimuth ? "true" : "false",
+      register_tolerance_m: r.register_tolerance_m,
+    });
+    for (const p of state.register) params.append("register", `${p.x},${p.y}`);
+    return params.toString();
+  }
+
+  /** The baked result for the current controls, with the register applied on top. */
+  async function bakedPayload(signal) {
+    const { manifest } = state;
+    const r = request();
+    let flat = 0;
+    for (const key of manifest.order) {
+      const values = manifest.grid[key];
+      flat = flat * values.length + values.indexOf(r[key]);
+    }
+    const id = manifest.runs[flat];
+    if (!state.runs.has(id)) {
+      const pending = getJson(`data/runs/${id}.json`, signal);
+      state.runs.set(id, pending);
+      pending.catch(() => state.runs.delete(id));
+    }
+    const base = await state.runs.get(id);
+
+    const payload = {
+      ...base,
+      detections: base.detections.map((d) => ({ ...d })),
+      register: state.register.map((p) => ({ ...p, ...groundToPixel(base.scene, p.x, p.y) })),
+      config: {
+        ...r,
+        tile_px: manifest.tile_px,
+        overlap_px: manifest.overlap_px,
+        register_positions: state.register.length,
+      },
+    };
+
+    // Mirrors `fusion.register.Register.mark`: only a dark row changes, and only to structure.
+    for (const d of payload.detections) {
+      if (d.status !== "dark") continue;
+      if (state.register.some((p) => Math.hypot(p.x - d.x, p.y - d.y) <= r.register_tolerance_m)) {
+        d.status = "structure";
+      }
+    }
+    payload.counts = countStatuses(payload.detections);
+    return payload;
+  }
+
+  function countStatuses(detections) {
+    const counts = { total: detections.length, matched: 0, dark: 0, structure: 0, unsearched: 0 };
+    for (const d of detections) counts[d.status] = (counts[d.status] || 0) + 1;
+    return counts;
+  }
+
   const scheduleRefresh = debounce(() => {
-    if (state.mode === "live") refresh();
+    if (state.source === "live") refresh();
   }, 180);
+
+  /** Live mode waits for the slider to settle; a baked lookup is instant, so it just runs. */
+  function controlsChanged() {
+    if (state.source === "live") scheduleRefresh();
+    else if (state.source === "static") refresh();
+  }
 
   function debounce(fn, ms) {
     let handle;
@@ -186,6 +365,61 @@
       clearTimeout(handle);
       handle = setTimeout(() => fn(...args), ms);
     };
+  }
+
+  /* ───────────────────────── shareable URL state ───────────────────────── */
+
+  function readUrlState() {
+    const params = new URLSearchParams(window.location.search);
+    const values = {};
+    for (const spec of Object.values(SLIDERS)) {
+      const raw = params.get(spec.url);
+      if (raw !== null && raw !== "" && Number.isFinite(Number(raw))) values[spec.key] = Number(raw);
+    }
+    if (params.has("az")) values.apply_azimuth = params.get("az") !== "0";
+    if (state.source !== "snapshot") applyRequest(values);
+
+    const reg = params.get("reg");
+    if (reg && state.source !== "snapshot") {
+      state.register = reg
+        .split(";")
+        .map((pair) => pair.split(",").map(Number))
+        .filter((xy) => xy.length === 2 && xy.every(Number.isFinite))
+        .map(([x, y]) => ({ x, y }));
+    }
+
+    // `?select=3` deep-links a detection, so a finding can be shared as a URL.
+    const requested = Number(params.get("select"));
+    if (Number.isInteger(requested) && requested > 0) state.selected = requested - 1;
+  }
+
+  /** Only what differs from the defaults goes in the URL, so a plain link stays plain. */
+  function writeUrlState() {
+    const url = new URL(window.location.href);
+    const r = request();
+    const d = state.defaults;
+    for (const spec of Object.values(SLIDERS)) {
+      if (r[spec.key] !== d[spec.key] && state.source !== "snapshot") {
+        url.searchParams.set(spec.url, String(r[spec.key]));
+      } else {
+        url.searchParams.delete(spec.url);
+      }
+    }
+    if (r.apply_azimuth !== d.apply_azimuth) url.searchParams.set("az", r.apply_azimuth ? "1" : "0");
+    else url.searchParams.delete("az");
+
+    if (state.register.length) {
+      url.searchParams.set(
+        "reg",
+        state.register.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(";")
+      );
+    } else {
+      url.searchParams.delete("reg");
+    }
+
+    if (state.selected === null) url.searchParams.delete("select");
+    else url.searchParams.set("select", String(state.selected + 1));
+    history.replaceState(null, "", url);
   }
 
   /* ───────────────────────── rendering ───────────────────────── */
@@ -197,6 +431,8 @@
     if (state.selected !== null && !data.detections.some((d) => d.index === state.selected)) {
       state.selected = null;
     }
+    // A filter on a status that no longer occurs would hide everything behind a disabled card.
+    if (state.filter && !data.counts[state.filter]) state.filter = null;
 
     renderSceneMeta(data.scene);
     ensureSceneImage(data.scene);
@@ -226,17 +462,22 @@
 
   function ensureSceneImage(scene) {
     const canvas = els.canvas;
-    if (canvas.dataset.loaded === scene.id) return;
+    if (canvas.dataset.loaded === scene.id || canvas.dataset.loading === scene.id) return;
 
+    canvas.dataset.loading = scene.id;
     canvas.width = scene.width;
     canvas.height = scene.height;
     const image = new Image();
     image.onload = () => {
       canvas.getContext("2d").drawImage(image, 0, 0);
       canvas.dataset.loaded = scene.id;
+      delete canvas.dataset.loading;
       layoutStage();
     };
-    image.onerror = () => setStageState("Scene image unavailable", "The overlay is still usable.");
+    image.onerror = () => {
+      delete canvas.dataset.loading;
+      setStageState("Scene image unavailable", "The overlay is still usable.");
+    };
     image.src = canvas.dataset.src;
     layoutStage();
   }
@@ -253,22 +494,15 @@
     els.counts.innerHTML = cards
       .map(([key, label, value]) => {
         const filterable = key !== "total";
-        const pressed = state.filter === key;
+        const pressed = key === "total" ? state.filter === null : state.filter === key;
         return `<button type="button" class="stat stat-${key}" data-filter="${key}"
-          aria-pressed="${pressed}" ${filterable && value === 0 ? "disabled" : ""}>
+          aria-pressed="${pressed}" ${filterable && value === 0 ? "disabled" : ""}
+          title="${filterable ? `Show only ${label.toLowerCase()} detections` : "Show all detections"}">
           <span class="stat-value">${value}</span>
           <span class="stat-label">${label}</span>
         </button>`;
       })
       .join("");
-
-    for (const button of els.counts.querySelectorAll(".stat")) {
-      button.addEventListener("click", () => {
-        const key = button.dataset.filter;
-        state.filter = key === "total" || state.filter === key ? null : key;
-        render();
-      });
-    }
   }
 
   function renderTable(detections) {
@@ -288,32 +522,16 @@
         const dim = visible(d) ? "" : " is-dimmed";
         const selected = d.index === state.selected ? " is-selected" : "";
         return `<tr tabindex="0" data-index="${d.index}" class="${dim}${selected}"
-            aria-label="Detection ${d.index + 1}, ${STATUS_TEXT[d.status] || d.status}">
+            aria-label="Detection ${d.index + 1}, ${statusText(d.status)}">
           <td>${d.index + 1}</td>
-          <td><span class="pill pill-${d.status}">${STATUS_TEXT[d.status] || d.status}</span></td>
+          <td><span class="pill pill-${d.status}">${statusText(d.status)}</span></td>
           <td class="${d.mmsi ? "" : "muted"}">${d.mmsi ? escapeHtml(d.mmsi) : "—"}</td>
-          <td class="right ${d.match_distance_m === null ? "muted" : ""}">${fmtM(d.match_distance_m, 1)}</td>
+          <td class="right ${isAbsent(d.match_distance_m) ? "muted" : ""}">${fmtM(d.match_distance_m, 1)}</td>
           <td class="${d.position_basis ? "" : "muted"}">${d.position_basis ? escapeHtml(d.position_basis) : "—"}</td>
           <td class="right ${d.azimuth_shift_m ? "" : "muted"}">${fmtM(d.azimuth_shift_m, 0)}</td>
         </tr>`;
       })
       .join("");
-
-    for (const row of els.tbody.querySelectorAll("tr[data-index]")) {
-      const index = Number(row.dataset.index);
-      row.addEventListener("click", () => select(index));
-      row.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          select(index);
-        } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-          event.preventDefault();
-          const rows = [...els.tbody.querySelectorAll("tr[data-index]")];
-          const next = rows[rows.indexOf(row) + (event.key === "ArrowDown" ? 1 : -1)];
-          if (next) next.focus();
-        }
-      });
-    }
   }
 
   function renderOverlay(data) {
@@ -327,17 +545,15 @@
     const marks = group(svg, "marks");
 
     for (const position of data.register) {
-      const ring = el("circle", {
-        class: "reg-ring",
-        cx: position.px,
-        cy: position.py,
-        r: registerRadiusPx(data),
-      });
-      const cross = el("path", {
-        class: "reg-mark",
-        d: crossPath(position.px, position.py, 5),
-      });
-      lines.append(ring, cross);
+      lines.append(
+        el("circle", {
+          class: "reg-ring",
+          cx: position.px,
+          cy: position.py,
+          r: data.config.register_tolerance_m / data.scene.pixel_size_m,
+        }),
+        el("path", { class: "reg-mark", d: crossPath(position.px, position.py, 5) })
+      );
     }
 
     for (const declaration of data.declarations) {
@@ -384,25 +600,15 @@
         class: `mark mark-${detection.status}${dimmed}${selected}`,
         tabindex: "0",
         role: "button",
-        "aria-label": `Detection ${detection.index + 1}, ${STATUS_TEXT[detection.status] || detection.status}`,
+        "aria-label": `Detection ${detection.index + 1}, ${statusText(detection.status)}`,
       });
       mark.dataset.index = String(detection.index);
       mark.append(
         el("rect", { class: "mark-halo", x: 0, y: 0, width: 1, height: 1 }),
         el("rect", { class: "mark-box", x: 0, y: 0, width: 1, height: 1 }),
         el("text", { class: "mark-label", x: 0, y: 0 }, String(detection.index + 1)),
-        title(`#${detection.index + 1} · ${STATUS_TEXT[detection.status] || detection.status}`)
+        title(`#${detection.index + 1} · ${statusText(detection.status)}`)
       );
-      mark.addEventListener("click", (event) => {
-        event.stopPropagation();
-        select(detection.index);
-      });
-      mark.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          select(detection.index);
-        }
-      });
       marks.append(mark);
     }
 
@@ -415,11 +621,6 @@
       parts.push(`azimuth shift: ${fmtM(declaration.azimuth_shift_m)}`);
     }
     return parts.join(" · ");
-  }
-
-  function registerRadiusPx(data) {
-    const registerTolerance = data.config.register_tolerance_m || 100;
-    return registerTolerance / data.scene.pixel_size_m;
   }
 
   /** Size marks in scene units so their on-screen size stays constant across zoom levels. */
@@ -460,8 +661,8 @@
       return;
     }
 
-    const declared = detections.filter((d) => d.declarations_searched !== null);
-    const searched = declared.length ? declared[0].declarations_searched : 0;
+    const declared = detections.find((d) => !isAbsent(d.declarations_searched));
+    const searched = declared ? declared.declarations_searched : null;
     const rules = Object.entries(ais.removed);
 
     els.aisSummary.innerHTML = `
@@ -488,14 +689,6 @@
       )
       .join("");
     els.clearStructures.hidden = state.register.length === 0;
-
-    for (const button of els.registerList.querySelectorAll("[data-remove]")) {
-      button.addEventListener("click", () => {
-        state.register.splice(Number(button.dataset.remove), 1);
-        renderRegister();
-        refresh();
-      });
-    }
   }
 
   function renderInspector() {
@@ -506,24 +699,37 @@
       els.inspector.innerHTML = `
         <h2 class="panel-title">Inspector</h2>
         <div class="inspector-empty">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/>
           </svg>
           <p style="margin:0">Select a detection on the scene or in the table to see why it was classified the way it was.</p>
+          <p style="margin:0"><a href="guide.html">New here? Take the two-minute tour →</a></p>
         </div>`;
       return;
     }
 
     const declaration = data.declarations.find((d) => d.matched_index === detection.index);
+    const position = data.detections.indexOf(detection);
+    const previous = data.detections[position - 1];
+    const next = data.detections[position + 1];
     els.inspector.innerHTML = `
-      <h2 class="panel-title">Inspector</h2>
+      <div class="insp-top">
+        <h2 class="panel-title">Inspector</h2>
+        <div class="insp-nav">
+          <button type="button" class="icon-btn" data-step="${previous ? previous.index : ""}"
+            ${previous ? "" : "disabled"} aria-label="Previous detection">‹</button>
+          <button type="button" class="icon-btn" data-step="${next ? next.index : ""}"
+            ${next ? "" : "disabled"} aria-label="Next detection">›</button>
+          <button type="button" class="icon-btn" data-close aria-label="Close inspector">×</button>
+        </div>
+      </div>
       <div class="insp-head">
         ${detection.crop
           ? `<img class="insp-crop" src="${detection.crop}" alt="SAR crop around detection ${detection.index + 1}">`
           : `<div class="insp-crop"></div>`}
         <div class="insp-title">
           <h3>Detection ${detection.index + 1}
-            <span class="pill pill-${detection.status}">${STATUS_TEXT[detection.status] || detection.status}</span>
+            <span class="pill pill-${detection.status}">${statusText(detection.status)}</span>
           </h3>
           <p class="insp-sub">${fmtNum(detection.x, 1)}, ${fmtNum(detection.y, 1)}<br>
              row ${fmtNum(detection.row, 1)} · col ${fmtNum(detection.col, 1)}</p>
@@ -561,7 +767,7 @@
           <dt>Distance to shore</dt><dd class="zero">${fmtM(detection.distance_to_shore_m)}</dd>
           <dt>Depth</dt><dd class="zero">${fmtM(detection.depth_m)}</dd>
           <dt>Fishing hours</dt><dd class="zero">${fmtNum(detection.fishing_hours, 1)}</dd>
-          <dt>EEZ</dt><dd class="zero">${detection.eez ?? "—"}</dd>
+          <dt>EEZ</dt><dd class="zero">${escapeHtml(detection.eez ?? "—")}</dd>
         </dl>
         <p class="rule-note">Declared but not yet sampled — the schema is fixed so a layer's
         presence never depends on whether the credentialed stage ran.</p>
@@ -583,8 +789,8 @@
     if (detection.status === "dark") {
       const searched = detection.declarations_searched ?? 0;
       return `<strong>Searched, and nothing explains it.</strong>
-        ${searched} declaration${searched === 1 ? "" : "s"} were placed at the acquisition instant
-        and none could be assigned to this detection within ${fmtM(detection.tolerance_m)}.
+        ${searched} declaration${searched === 1 ? " was" : "s were"} placed at the acquisition
+        instant and none could be assigned to this detection within ${fmtM(detection.tolerance_m)}.
         A declaration may still lie within tolerance and belong to a nearer detection — the
         assignment is one-to-one.`;
     }
@@ -614,12 +820,9 @@
 
   /* ───────────────────────── selection ───────────────────────── */
 
-  function select(index) {
-    state.selected = state.selected === index ? null : index;
-    const url = new URL(window.location.href);
-    if (state.selected === null) url.searchParams.delete("select");
-    else url.searchParams.set("select", String(state.selected + 1));
-    history.replaceState(null, "", url);
+  function select(index, { toggle = true } = {}) {
+    state.selected = toggle && state.selected === index ? null : index;
+    writeUrlState();
     for (const row of els.tbody.querySelectorAll("tr[data-index]")) {
       row.classList.toggle("is-selected", Number(row.dataset.index) === state.selected);
     }
@@ -627,6 +830,70 @@
       mark.classList.toggle("is-selected", Number(mark.dataset.index) === state.selected);
     }
     renderInspector();
+  }
+
+  /* One listener per container, bound once: the contents are re-rendered on every run. */
+  function bindDelegatedClicks() {
+    els.counts.addEventListener("click", (event) => {
+      const button = event.target.closest(".stat");
+      if (!button || button.disabled) return;
+      const key = button.dataset.filter;
+      state.filter = key === "total" || state.filter === key ? null : key;
+      render();
+    });
+
+    els.tbody.addEventListener("click", (event) => {
+      const row = event.target.closest("tr[data-index]");
+      if (row) select(Number(row.dataset.index));
+    });
+    els.tbody.addEventListener("keydown", (event) => {
+      const row = event.target.closest("tr[data-index]");
+      if (!row) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        select(Number(row.dataset.index));
+      } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const rows = [...els.tbody.querySelectorAll("tr[data-index]")];
+        const next = rows[rows.indexOf(row) + (event.key === "ArrowDown" ? 1 : -1)];
+        if (next) next.focus();
+      }
+    });
+
+    // While placing, a click on a marker registers a position there — standing a register on
+    // top of a dark detection is the whole point — so it falls through to the stage.
+    els.overlay.addEventListener("click", (event) => {
+      const mark = event.target.closest(".mark");
+      if (!mark || state.placing) return;
+      event.stopPropagation();
+      if (!state.dragged) select(Number(mark.dataset.index));
+    });
+    els.overlay.addEventListener("keydown", (event) => {
+      const mark = event.target.closest(".mark");
+      if (mark && (event.key === "Enter" || event.key === " ")) {
+        event.preventDefault();
+        event.stopPropagation();
+        select(Number(mark.dataset.index));
+      }
+    });
+
+    els.inspector.addEventListener("click", (event) => {
+      const step = event.target.closest("[data-step]");
+      if (step && step.dataset.step !== "") {
+        select(Number(step.dataset.step), { toggle: false });
+        els.inspector.querySelector(`[data-step]:not([disabled])`)?.focus();
+      } else if (event.target.closest("[data-close]")) {
+        select(state.selected);
+      }
+    });
+
+    els.registerList.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-remove]");
+      if (!button) return;
+      state.register.splice(Number(button.dataset.remove), 1);
+      renderRegister();
+      refresh();
+    });
   }
 
   /* ───────────────────────── stage: layout, pan, zoom ───────────────────────── */
@@ -662,6 +929,8 @@
     els.inner.style.transform =
       `translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.zoom})`;
     els.zoomLevel.textContent = `${Math.round(state.zoom * 100)}%`;
+    $("zoom-out").disabled = state.zoom <= 1;
+    $("zoom-in").disabled = state.zoom >= 12;
     restyleMarks();
     updateScalebar();
   }
@@ -706,34 +975,48 @@
   }
 
   function bindStage() {
-    let dragging = false;
-    let moved = false;
-    let origin = { x: 0, y: 0 };
+    const DRAG_THRESHOLD_PX = 4;
+    let drag = null;
 
+    // Pointer capture starts only once the pointer has really moved. Capturing on
+    // pointerdown retargets the click to the stage, and a click on a marker never arrives.
     els.stage.addEventListener("pointerdown", (event) => {
-      if (state.placing) return;
-      dragging = true;
-      moved = false;
-      origin = { x: event.clientX - state.pan.x, y: event.clientY - state.pan.y };
-      els.stage.setPointerCapture(event.pointerId);
+      state.dragged = false;
+      if (state.placing || event.button !== 0) return;
+      drag = {
+        id: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        pan: { ...state.pan },
+        active: false,
+      };
     });
 
     els.stage.addEventListener("pointermove", (event) => {
-      if (!dragging) return;
-      state.pan.x = event.clientX - origin.x;
-      state.pan.y = event.clientY - origin.y;
-      if (Math.abs(event.movementX) + Math.abs(event.movementY) > 0) moved = true;
+      if (!drag || event.pointerId !== drag.id) return;
+      const dx = event.clientX - drag.x;
+      const dy = event.clientY - drag.y;
+      if (!drag.active) {
+        if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX || state.zoom === 1) return;
+        drag.active = true;
+        state.dragged = true;
+        els.stage.setPointerCapture(drag.id);
+        els.stage.classList.add("is-dragging");
+      }
+      state.pan.x = drag.pan.x + dx;
+      state.pan.y = drag.pan.y + dy;
       constrainPan();
       els.inner.style.transform =
         `translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.zoom})`;
     });
 
     const endDrag = (event) => {
-      if (dragging && els.stage.hasPointerCapture?.(event.pointerId)) {
-        els.stage.releasePointerCapture(event.pointerId);
+      if (!drag || event.pointerId !== drag.id) return;
+      if (drag.active && els.stage.hasPointerCapture?.(drag.id)) {
+        els.stage.releasePointerCapture(drag.id);
       }
-      dragging = false;
-      if (!moved) updateScalebar();
+      els.stage.classList.remove("is-dragging");
+      drag = null;
     };
     els.stage.addEventListener("pointerup", endDrag);
     els.stage.addEventListener("pointercancel", endDrag);
@@ -749,7 +1032,7 @@
     );
 
     els.stage.addEventListener("click", (event) => {
-      if (!state.placing || moved) return;
+      if (!state.placing || state.dragged) return;
       const point = scenePointFromEvent(event);
       if (!point) return;
       state.register.push(point);
@@ -759,6 +1042,7 @@
     });
 
     els.stage.addEventListener("keydown", (event) => {
+      if (event.target !== els.stage) return;
       const step = 40;
       const keys = {
         ArrowLeft: () => (state.pan.x += step),
@@ -780,9 +1064,11 @@
       } else if (event.key === "0") {
         event.preventDefault();
         resetView();
-      } else if (event.key === "Escape" && state.placing) {
-        setPlacing(false);
       }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && state.placing) setPlacing(false);
     });
 
     $("zoom-in").addEventListener("click", () => zoomTo(state.zoom * 1.3));
@@ -815,16 +1101,23 @@
     return { x: a * col + b * row + c, y: d * col + e * row + f };
   }
 
+  /** The inverse of the above, for positions that arrive as ground coordinates (a shared URL). */
+  function groundToPixel(scene, x, y) {
+    const [a, b, c, d, e, f] = scene.transform;
+    const det = a * e - b * d;
+    return { px: (e * (x - c) - b * (y - f)) / det, py: (a * (y - f) - d * (x - c)) / det };
+  }
+
   function setPlacing(on) {
     state.placing = on;
     els.addStructure.setAttribute("aria-pressed", String(on));
     els.stage.classList.toggle("is-placing", on);
     els.addStructure.lastChild.textContent = on
-      ? " Click the scene to register a position"
+      ? " Click the scene — Esc to cancel"
       : " Register by clicking the scene";
   }
 
-  /* ───────────────────────── stage states ───────────────────────── */
+  /* ───────────────────────── stage states + toast ───────────────────────── */
 
   function setStageState(title, detail = "") {
     els.stageState.hidden = false;
@@ -833,6 +1126,75 @@
 
   function clearStageState() {
     els.stageState.hidden = true;
+  }
+
+  let toastTimer;
+  function toast(message) {
+    els.toast.textContent = message;
+    els.toast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (els.toast.hidden = true), 2600);
+  }
+
+  /* ───────────────────────── share + export ───────────────────────── */
+
+  async function copyLink() {
+    writeUrlState();
+    const link = window.location.href;
+    try {
+      await navigator.clipboard.writeText(link);
+      toast("Link copied — it reopens this exact view.");
+    } catch {
+      window.prompt("Copy this link:", link);
+    }
+  }
+
+  const CSV_COLUMNS = [
+    ["detection", (d) => d.index + 1],
+    ["status", (d) => d.status],
+    ["mmsi", (d) => d.mmsi],
+    ["x", (d) => d.x],
+    ["y", (d) => d.y],
+    ["row", (d) => d.row],
+    ["col", (d) => d.col],
+    ["match_distance_m", (d) => d.match_distance_m],
+    ["position_basis", (d) => d.position_basis],
+    ["position_age_s", (d) => d.position_age_s],
+    ["azimuth_shift_m", (d) => d.azimuth_shift_m],
+    ["tolerance_m", (d) => d.tolerance_m],
+    ["declarations_searched", (d) => d.declarations_searched],
+    ["acquired_at", (d) => d.acquired_at],
+    ["scene", (d) => d.scene],
+  ];
+
+  function exportCsv() {
+    const data = state.payload;
+    if (!data) return;
+    const cell = (v) => {
+      if (isAbsent(v)) return "";
+      const s = String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [CSV_COLUMNS.map(([name]) => name).join(",")];
+    for (const d of data.detections) lines.push(CSV_COLUMNS.map(([, get]) => cell(get(d))).join(","));
+    download(`${data.scene.id}-detections.csv`, lines.join("\n") + "\n", "text/csv");
+  }
+
+  function exportJson() {
+    const data = state.payload;
+    if (!data) return;
+    // Crops are base64 images; a run export is for analysis, so they are left out.
+    const run = { ...data, detections: data.detections.map(({ crop, ...rest }) => rest) };
+    download(`${data.scene.id}-run.json`, JSON.stringify(run, null, 2), "application/json");
+  }
+
+  function download(name, text, type) {
+    const url = URL.createObjectURL(new Blob([text], { type }));
+    const link = Object.assign(document.createElement("a"), { href: url, download: name });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   /* ───────────────────────── svg helpers ───────────────────────── */
@@ -861,25 +1223,18 @@
   /* ───────────────────────── controls ───────────────────────── */
 
   function bindControls() {
-    const outputs = {
-      tolerance: (v) => `${v} m`,
-      maxgap: (v) => `${v} min`,
-      threshold: (v) => Number(v).toFixed(2),
-      "register-tolerance": (v) => `${v} m`,
-    };
-
-    for (const [id, format] of Object.entries(outputs)) {
+    for (const [id, spec] of Object.entries(SLIDERS)) {
       const input = $(id);
       const output = $(`${id}-out`);
-      const sync = () => (output.textContent = format(input.value));
       input.addEventListener("input", () => {
-        sync();
-        scheduleRefresh();
+        output.textContent = spec.fmt(sliderValue(id));
+        // The register is applied in the browser in static mode, and re-run live otherwise.
+        controlsChanged();
       });
-      sync();
     }
+    syncOutputs();
 
-    controls.azimuth.addEventListener("change", scheduleRefresh);
+    azimuth.addEventListener("change", controlsChanged);
 
     els.addStructure.addEventListener("click", () => setPlacing(!state.placing));
     els.clearStructures.addEventListener("click", () => {
@@ -889,20 +1244,19 @@
     });
 
     $("reset").addEventListener("click", () => {
-      controls.tolerance.value = DEFAULTS.tolerance;
-      controls.maxgap.value = DEFAULTS.maxgap;
-      controls.threshold.value = DEFAULTS.threshold;
-      controls.azimuth.checked = DEFAULTS.azimuth;
-      controls.registerTolerance.value = DEFAULTS.registerTolerance;
+      applyRequest(state.defaults);
       state.register = [];
       state.filter = null;
       state.selected = null;
-      for (const id of ["tolerance", "maxgap", "threshold", "register-tolerance"]) {
-        $(id).dispatchEvent(new Event("input"));
-      }
+      setPlacing(false);
+      resetView();
       renderRegister();
       refresh();
     });
+
+    $("copy-link").addEventListener("click", copyLink);
+    $("export-csv").addEventListener("click", exportCsv);
+    $("export-json").addEventListener("click", exportJson);
   }
 
   boot();

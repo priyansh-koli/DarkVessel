@@ -20,7 +20,7 @@ Run from the project root:
 
 ```bash
 source .venv/bin/activate          # if missing: python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
-pytest -q                           # expect: 150 passed
+pytest -q                           # expect: 163 passed
 ruff check src/ tests/              # expect: All checks passed!
 darkvessel synthesise --out data/synthetic
 darkvessel run --config configs/pipeline.yaml
@@ -36,7 +36,7 @@ darkvessel run --config configs/pipeline.yaml
 |---|---|
 | Tier 1 — core pipeline (tiling, pixel→ground, AIS interpolation, azimuth correction, optimal matching, structure register, recurrence clustering, CLI) | **Done**, tested |
 | AIS ingestion — DMA CSV reader and cleaning rules with per-rule counts | **Done**, tested against the format; not yet run on a real DMA day file |
-| Viewer — FastAPI live app + static bundle | **Done**, checked in a real browser at desktop and phone widths |
+| Viewer — FastAPI live app + static bundle (every control baked), Guide and How it works pages | **Done**, every control checked in Chrome in both modes, at desktop and phone widths |
 | Deployment — CI, GitHub Pages | **Live.** CI green on 3.9 and 3.12; static viewer at https://priyansh-koli.github.io/DarkVessel/ |
 | Deployment — Dockerfile (live app) | **Written, never built** (no docker on the dev machine) |
 | Detector | Deterministic stand-in (`BrightPixelDetector`) only — no trained model |
@@ -45,7 +45,7 @@ darkvessel run --config configs/pipeline.yaml
 | Analysis — archive-wide concentration analysis, static map | **Not started** |
 | Real data | **None yet** — everything runs on the synthetic fixture |
 
-- Tests: 150 passing. Lint: clean.
+- Tests: 163 passing. Lint: clean.
 - Git: `main` tracks `origin` = https://github.com/priyansh-koli/DarkVessel (public). Every push
   to `main` runs CI and republishes the viewer.
 - Python: the dev machine has only system Python 3.9.6, so the project targets `>=3.9`.
@@ -96,6 +96,35 @@ In rough priority order — see [Final_goal.md](Final_goal.md) for why.
 ---
 
 ## Session log
+
+### 2026-09-18 — viewer fixes, interactive static site, new pages, caching
+
+- **Bugs fixed (all reproduced in Chrome first):** scene markers could not be clicked (unfilled
+  boxes were only hit-testable on their 2 px outline; the halo is now the hit area); every
+  control on the published static site was disabled; one failed live request left the
+  viewer permanently unable to refresh; registering a structure by clicking a dark
+  detection selected it instead; a filter on a status that dropped to zero stuck behind a
+  disabled card; Reset fired duplicate requests and left placing mode and the URL behind.
+- **Static site is now interactive:** `darkvessel render` bakes every control position
+  (`web/bake.py`, 17,600 positions -> 80 distinct runs, ~1 s) behind `data/manifest.json`.
+  The register is applied in the browser, which is exact (dark -> structure, after matching).
+- **AIS is now cleaned before matching** in the viewer and in `darkvessel run`. Before this,
+  cleaning was only *reported*: the viewer's "a dark claim rests on this" was not true.
+  Synthetic numbers unchanged.
+- **Efficiency:** `pipeline.run` split into `detect_scene` + `fuse`; the viewer holds a
+  `Viewer` that caches detection and crops per threshold and declared positions per max gap;
+  the WGS84 transformer is built once; the API gzips responses (4.7 KB -> 1.1 KB).
+- **New:** Guide page (tour with five one-click scenario links, statuses, shortcuts, FAQ),
+  How it works page, site nav, Share (URL restores controls, register and selection), CSV /
+  JSON export, inspector previous / next / close.
+- `docs/pipeline.svg` moved to `src/darkvessel/web/static/pipeline.svg` so the site can use it.
+- Verified: 163 tests (new ones mutation-checked), ruff clean, a Playwright script clicking
+  every control in static and live modes, the five guide links, error recovery, and
+  phone-width layout with no horizontal scroll.
+- **Found, not changed (science semantics; needs a decision):** `fusion/interpolate.py`
+  interpolates between bracketing reports however far apart they are (max gap is only
+  applied to lone reports); and when the acquisition precedes a track, velocity is taken
+  from the *last* two reports of the track rather than the first two.
 
 ### 2026-09-18 — published to GitHub
 

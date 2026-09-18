@@ -6,16 +6,17 @@ because it decides everything else.
 
 | | **Static bundle** | **Live app** |
 |---|---|---|
-| What the visitor gets | One pre-computed run, fully explorable | Controls that re-run the pipeline |
+| What the visitor gets | Every control position pre-computed, fully interactive | Controls that re-run the pipeline |
 | Runtime on the server | None — plain files | Python 3.9+ |
 | Where it can host | Any static host or CDN | Container platform or VM |
-| Bundle / image size | ~80 KB | ~400 MB image |
+| Bundle / image size | ~800 KB (synthetic scene) | ~400 MB image |
 | Cost | Free tier nearly everywhere | Small instance, from ~$0–7/mo |
 | Build step needs Python | Yes (at build time only) | Yes |
 
 If you only need to *show* the result — a demo, a report, a link in a paper — the static
-bundle is the right answer and costs nothing to run. Choose the live app when someone needs
-to move the tolerance slider or toggle the azimuth correction themselves.
+bundle is the right answer and costs nothing to run. Its controls work too: every position
+they can take was run at build time. Choose the live app for arbitrary parameter values (max
+gap in single minutes, tolerances off the 25 m grid) or for a real scene too big to bake.
 
 ---
 
@@ -95,14 +96,23 @@ darkvessel render --config configs/pipeline.yaml --out site
 
 ```
 site/
-  index.html  styles.css  app.js
-  assets/scene.png      # the SAR scene, rendered at native resolution
-  data/run.json         # one full pipeline run, with every detection crop inlined as a PNG
+  index.html  guide.html  about.html  styles.css  app.js  pipeline.svg
+  assets/scene.png        # the SAR scene, rendered at native resolution
+  data/run.json           # the default run, with every detection crop inlined as a PNG
+  data/manifest.json      # every control position -> the id of its result
+  data/runs/<id>.json     # each distinct result, once
 ```
 
-Detection crops are base64-inlined into `run.json` rather than written as separate files, so
-the static build and the live API hand the frontend exactly the same payload — one code path,
-not two. The whole bundle is ~80 KB.
+`render` runs the pipeline for every position the tolerance, max-gap, threshold and azimuth
+controls can take (17,600 on the synthetic scene). Detection depends only on the threshold
+and declared positions only on the max gap, so equivalent inputs are run once, and identical
+results are written once: the synthetic scene bakes in about a second into 80 result files.
+Each file is the same payload the live API returns, minus the `config` block the browser
+already knows. The structure register is applied in the browser, which is exact because it
+only ever turns a dark row into a structure after matching. The whole bundle is ~800 KB.
+
+A real scene with hundreds of detections makes each result file larger; if the bundle grows
+too big, narrow the grids at the top of `web/bake.py`.
 
 Check it locally before shipping:
 
@@ -110,9 +120,10 @@ Check it locally before shipping:
 python -m http.server -d site 8080
 ```
 
-The viewer detects that no API is present, shows a **"Static build — controls read-only"**
-badge, and disables the sliders. Everything else — the overlay, the inspector, the detections
-table, deep links like `?select=3` — works normally.
+The viewer detects that no API is present, loads `data/manifest.json`, and shows a
+**"Static build — every control pre-computed"** badge. Every control works; max gap steps
+through its preset values instead of single minutes. A bundle without a manifest (built
+before baking existed) falls back to `run.json` with the controls read-only.
 
 ### Where to put it
 
@@ -273,7 +284,8 @@ server {
 
 - Publishing a result, a demo, or a link for a paper → **static bundle**, on GitHub Pages.
   Free, nothing to operate, nothing to break.
-- Analysts need to vary tolerance, gap, threshold or the azimuth correction → **live app**,
-  on Render or Fly.io with 1 GB RAM for the synthetic fixture.
+- Analysts need arbitrary parameter values, not the baked grid → **live app**, on Render or
+  Fly.io with 1 GB RAM for the synthetic fixture. The app caches detection per threshold and
+  gzips responses, so a fusion control costs a match, not a scene read.
 - Real Sentinel-1 scenes → **live app on a 4 GB+ instance**, with caching in front of
   `/api/run`, or pre-render one static bundle per scene if the parameters are fixed.

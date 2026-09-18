@@ -11,23 +11,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import timedelta
+from functools import lru_cache
 from typing import Any
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from pyproj import Transformer
 from shapely import Point
 
 from darkvessel.data.ais import clean
 from darkvessel.data.scene import Scene
 from darkvessel.data.tiling import Tiling
+from darkvessel.detect.infer import detect_scene
 from darkvessel.detect.stub import BrightPixelDetector
 from darkvessel.embed.structures import SAME_POSITION_M
 from darkvessel.fusion.azimuth import Geometry
 from darkvessel.fusion.interpolate import positions_at
+from darkvessel.fusion.match import to_wgs84
 from darkvessel.fusion.register import Register
-from darkvessel.pipeline import run as run_pipeline
+from darkvessel.pipeline import fuse
 from darkvessel.render import crop_data_uris
 
 # Columns the inspector shows verbatim. Anything the pipeline adds later appears automatically.
@@ -48,39 +50,145 @@ class RunRequest:
     register_tolerance_m: float = SAME_POSITION_M
 
 
+class Viewer:
+    """One scene and its AIS archive, loaded once and re-run under many requests.
+
+    Everything a request cannot change is prepared here once: the archive is cleaned (so the
+    cleaning report the viewer shows is the archive the match actually searched), and the scene
+    summary is fixed. Detection — the only step that reads every pixel — is cached per detector
+    setting, and declared positions per max gap, so moving the tolerance slider or toggling the
+    azimuth correction never re-reads the scene.
+    """
+
+    def __init__(self, scene: Scene, ais: gpd.GeoDataFrame | None) -> None:
+        self.scene = scene
+        if ais is None:
+            self.ais, self.ais_summary = None, None
+        else:
+            cleaned, report = clean(ais)
+            if cleaned.crs != scene.crs:
+                cleaned = cleaned.to_crs(scene.crs)
+            self.ais = cleaned
+            self.ais_summary = {
+                "rows_in": report.starting_rows,
+                "rows_kept": len(cleaned),
+                "removed": dict(report.removed),
+                "line": report.line(),
+                "vessels": int(cleaned["mmsi"].nunique()) if not cleaned.empty else 0,
+            }
+        self.scene_summary = _scene_summary(scene)
+        self._latitude = _latitude_of(scene)
+        # Bounded: the HTTP API accepts any float, and a public server must not grow forever.
+        self._detect = lru_cache(maxsize=32)(self._detect_uncached)
+        self._declared = lru_cache(maxsize=32)(self._declared_uncached)
+
+    def run(self, request: RunRequest) -> dict[str, Any]:
+        """Run the chain under `request` and return everything the viewer needs to draw it."""
+        scene = self.scene
+        max_gap = timedelta(minutes=request.max_gap_minutes)
+        geometry = (
+            Geometry(heading_deg=scene.heading_deg, incidence_deg=scene.incidence_deg)
+            if request.apply_azimuth
+            else None
+        )
+        register = _register(request)
+        found, crops = self._detect(request.detector_threshold, request.tile_px, request.overlap_px)
+
+        detections = fuse(
+            scene=scene,
+            found=found,
+            ais=self.ais,
+            tolerance_m=request.tolerance_m,
+            max_gap=max_gap,
+            geometry=geometry,
+            structures=register,
+        )
+
+        return {
+            "scene": self.scene_summary,
+            "config": _config_summary(request, register),
+            "counts": _counts(detections),
+            "detections": _detections(detections, crops),
+            "declarations": self._declarations(request.max_gap_minutes, geometry, detections),
+            "ais": self.ais_summary,
+            "register": [
+                {"x": x, "y": y, **_to_pixel(scene, x, y)} for x, y in request.register_xy
+            ],
+        }
+
+    def detections_key(self, threshold: float, tile_px: int, overlap_px: int) -> str:
+        """Equal for two detector settings that find the same pixels, and so give equal runs."""
+        found, _ = self._detect(threshold, tile_px, overlap_px)
+        return found.to_json()
+
+    def declarations_key(self, max_gap_minutes: float) -> str:
+        """Equal for two max gaps that declare the same positions, and so give equal runs."""
+        if self.ais is None:
+            return ""
+        return self._declared(max_gap_minutes).to_json()
+
+    def _detect_uncached(
+        self, threshold: float, tile_px: int, overlap_px: int
+    ) -> tuple[pd.DataFrame, list[str]]:
+        found = detect_scene(
+            self.scene.image,
+            BrightPixelDetector(threshold=threshold),
+            Tiling(tile_px=tile_px, overlap_px=overlap_px),
+        )
+        return found, crop_data_uris(self.scene.image, found[["row", "col"]])
+
+    def _declared_uncached(self, max_gap_minutes: float) -> gpd.GeoDataFrame:
+        return positions_at(self.ais, self.scene.acquired_at, timedelta(minutes=max_gap_minutes))
+
+    def _declarations(
+        self,
+        max_gap_minutes: float,
+        geometry: Geometry | None,
+        detections: gpd.GeoDataFrame,
+    ) -> list[dict[str, Any]]:
+        """Each vessel's declared position at the acquisition instant, raw and radar-corrected."""
+        if self.ais is None or self.ais.empty:
+            return []
+        declared = self._declared(max_gap_minutes)
+        if declared.empty:
+            return []
+
+        scene = self.scene
+        matched_by_mmsi = {
+            str(row["mmsi"]): position
+            for position, (_, row) in enumerate(detections.iterrows())
+            if row["status"] == "matched" and not pd.isna(row["mmsi"])
+        }
+
+        rows = []
+        for _, row in declared.iterrows():
+            raw = row.geometry
+            east, north = 0.0, 0.0
+            if geometry is not None and np.isfinite(row["velocity_east_ms"]) and np.isfinite(
+                row["velocity_north_ms"]
+            ):
+                east, north = geometry.displacement(
+                    row["velocity_east_ms"], row["velocity_north_ms"], self._latitude
+                )
+            drawn = Point(raw.x + east, raw.y + north)
+            rows.append(
+                {
+                    "mmsi": str(row["mmsi"]),
+                    "length_m": _plain(row["length_m"]),
+                    "position_basis": _plain(row["position_basis"]),
+                    "position_age_s": _plain(row["position_age_s"]),
+                    "azimuth_shift_m": float(np.hypot(east, north)),
+                    "matched_index": matched_by_mmsi.get(str(row["mmsi"])),
+                    "raw": {"x": raw.x, "y": raw.y, **_to_pixel(scene, raw.x, raw.y)},
+                    "drawn": {"x": drawn.x, "y": drawn.y, **_to_pixel(scene, drawn.x, drawn.y)},
+                }
+            )
+        return rows
+
+
 def build(scene: Scene, ais: gpd.GeoDataFrame | None, request: RunRequest) -> dict[str, Any]:
-    """Run the chain under `request` and return everything the viewer needs to draw it."""
-    max_gap = timedelta(minutes=request.max_gap_minutes)
-    geometry = (
-        Geometry(heading_deg=scene.heading_deg, incidence_deg=scene.incidence_deg)
-        if request.apply_azimuth
-        else None
-    )
-    register = _register(request)
-
-    detections = run_pipeline(
-        scene=scene,
-        ais=ais,
-        detector=BrightPixelDetector(threshold=request.detector_threshold),
-        tiling=Tiling(tile_px=request.tile_px, overlap_px=request.overlap_px),
-        tolerance_m=request.tolerance_m,
-        max_gap=max_gap,
-        geometry=geometry,
-        structures=register,
-    )
-
-    crops = crop_data_uris(scene.image, detections[["row", "col"]])
-    return {
-        "scene": _scene_summary(scene),
-        "config": _config_summary(request, register),
-        "counts": _counts(detections),
-        "detections": _detections(detections, crops),
-        "declarations": _declarations(scene, ais, max_gap, geometry, detections),
-        "ais": _ais_summary(ais),
-        "register": [
-            {"x": x, "y": y, **_to_pixel(scene, x, y)} for x, y in request.register_xy
-        ],
-    }
+    """A one-off run; hold a `Viewer` instead when running the same scene more than once."""
+    return Viewer(scene, ais).run(request)
 
 
 def _register(request: RunRequest) -> Register | None:
@@ -151,74 +259,10 @@ def _detections(detections: gpd.GeoDataFrame, crops: list[str]) -> list[dict[str
     return rows
 
 
-def _declarations(
-    scene: Scene,
-    ais: gpd.GeoDataFrame | None,
-    max_gap: timedelta,
-    geometry: Geometry | None,
-    detections: gpd.GeoDataFrame,
-) -> list[dict[str, Any]]:
-    """Each vessel's declared position at the acquisition instant, raw and radar-corrected."""
-    if ais is None or ais.empty:
-        return []
-
-    if ais.crs != scene.crs:
-        ais = ais.to_crs(scene.crs)
-    declared = positions_at(ais, scene.acquired_at, max_gap)
-    if declared.empty:
-        return []
-
-    matched_by_mmsi = {
-        str(row["mmsi"]): position
-        for position, (_, row) in enumerate(detections.iterrows())
-        if row["status"] == "matched" and not pd.isna(row["mmsi"])
-    }
-    latitude = _latitude_of(scene)
-
-    rows = []
-    for _, row in declared.iterrows():
-        raw = row.geometry
-        east, north = 0.0, 0.0
-        if geometry is not None and np.isfinite(row["velocity_east_ms"]) and np.isfinite(
-            row["velocity_north_ms"]
-        ):
-            east, north = geometry.displacement(
-                row["velocity_east_ms"], row["velocity_north_ms"], latitude
-            )
-        drawn = Point(raw.x + east, raw.y + north)
-        rows.append(
-            {
-                "mmsi": str(row["mmsi"]),
-                "length_m": _plain(row["length_m"]),
-                "position_basis": _plain(row["position_basis"]),
-                "position_age_s": _plain(row["position_age_s"]),
-                "azimuth_shift_m": float(np.hypot(east, north)),
-                "matched_index": matched_by_mmsi.get(str(row["mmsi"])),
-                "raw": {"x": raw.x, "y": raw.y, **_to_pixel(scene, raw.x, raw.y)},
-                "drawn": {"x": drawn.x, "y": drawn.y, **_to_pixel(scene, drawn.x, drawn.y)},
-            }
-        )
-    return rows
-
-
-def _ais_summary(ais: gpd.GeoDataFrame | None) -> dict[str, Any] | None:
-    """The cleaning report, which is what `declarations_searched` on a dark row rests on."""
-    if ais is None:
-        return None
-    cleaned, report = clean(ais)
-    return {
-        "rows_in": report.starting_rows,
-        "rows_kept": len(cleaned),
-        "removed": dict(report.removed),
-        "line": report.line(),
-        "vessels": int(cleaned["mmsi"].nunique()) if not cleaned.empty else 0,
-    }
-
-
 def _latitude_of(scene: Scene) -> float:
     height, width = scene.image.shape
     x, y = scene.transform * (width / 2, height / 2)
-    _, latitude = Transformer.from_crs(scene.crs, "EPSG:4326", always_xy=True).transform(x, y)
+    _, latitude = to_wgs84(str(scene.crs)).transform(x, y)
     return float(latitude)
 
 

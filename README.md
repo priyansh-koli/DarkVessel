@@ -62,9 +62,13 @@ was* — so every panel is an audit trail rather than a summary:
 - **The structure register** lets you register known fixed positions by clicking the scene and
   watch dark detections that stand on them reclassify.
 
-`?select=3` deep-links a detection, so a finding can be shared as a URL.
+**Share** copies a link that restores the whole view (every control, the register and the
+selected detection), and **CSV** / **JSON** download the current run. `?select=3` alone
+deep-links a detection. The viewer also ships a [Guide](src/darkvessel/web/static/guide.html)
+with one-click scenarios and a [How it works](src/darkvessel/web/static/about.html) page.
 
-To publish it without a Python host, pre-render a static bundle — ~80 KB, no server:
+To publish it without a Python host, pre-render a static bundle. It has no server, and every
+control still works because each position they can take is run at build time:
 
 ```bash
 darkvessel render --config configs/pipeline.yaml --out site
@@ -75,7 +79,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for what each hosting shape needs and how to 
 
 ## How it works
 
-![The darkvessel pipeline: a SAR path and an AIS path prepared independently, fused by an optimal one-to-one assignment within a tolerance, then filtered through a structure register into four statuses — matched, structure, dark and unsearched.](docs/pipeline.svg)
+![The darkvessel pipeline: a SAR path and an AIS path prepared independently, fused by an optimal one-to-one assignment within a tolerance, then filtered through a structure register into four statuses — matched, structure, dark and unsearched.](src/darkvessel/web/static/pipeline.svg)
 
 The two paths never touch until the fusion step, and that is the point: the SAR side answers
 *what is on the water*, the AIS side answers *what was declared*, and neither is allowed to
@@ -167,7 +171,7 @@ protocol is a drop-in replacement and nothing else changes.
 
 ## Status
 
-**Built and tested (150 tests passing):** the full Tier-1 core — tiling and dedup,
+**Built and tested (163 tests passing):** the full Tier-1 core — tiling and dedup,
 pixel→ground, AIS interpolation, azimuth correction, optimal matching, structure register,
 recurrence clustering, the pipeline seam, the CLI, and raw-archive AIS ingestion with every
 cleaning rule counted and auditable — plus the viewer, in both its live and static forms.

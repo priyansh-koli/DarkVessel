@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from darkvessel.data.synthetic import TOLERANCE_M, _ais, _scene
 from darkvessel.web.app import create_app
-from darkvessel.web.payload import RunRequest, build
+from darkvessel.web.payload import RunRequest, Viewer, build
 
 
 @pytest.fixture(scope="module")
@@ -164,3 +164,126 @@ def test_the_frontend_is_served_at_the_root(client):
     assert response.status_code == 200
     assert "darkvessel" in response.text
     assert "app.js" in response.text
+
+
+def test_health_reports_the_configured_defaults(client):
+    """Reset returns the controls here, so it must be the run configuration."""
+    defaults = client.get("/api/health").json()["defaults"]
+    assert defaults["tolerance_m"] == 200
+    assert defaults["apply_azimuth"] is True
+
+
+def test_the_run_payload_is_compressed(client):
+    response = client.get("/api/run", headers={"Accept-Encoding": "gzip"})
+    assert response.headers.get("content-encoding") == "gzip"
+
+
+def test_the_guide_and_how_it_works_pages_are_served(client):
+    for page in ("guide.html", "about.html", "pipeline.svg"):
+        assert client.get(f"/{page}").status_code == 200
+
+
+# ───────────────────────────── the cached viewer ─────────────────────────────
+
+
+def test_a_held_viewer_gives_the_same_payload_as_a_one_off_build(payload):
+    viewer = Viewer(_scene(), _ais())
+    viewer.run(RunRequest(tolerance_m=5))  # warm the caches with a different request
+    assert viewer.run(RunRequest(tolerance_m=TOLERANCE_M)) == payload
+
+
+def test_detection_runs_once_per_detector_setting(monkeypatch):
+    """Moving a fusion control must not re-read every pixel of the scene."""
+    import darkvessel.web.payload as payload_module
+
+    calls = []
+    real = payload_module.detect_scene
+    monkeypatch.setattr(
+        payload_module, "detect_scene", lambda *a, **k: calls.append(1) or real(*a, **k)
+    )
+    viewer = Viewer(_scene(), _ais())
+    for tolerance in (50, 100, 200):
+        for azimuth in (True, False):
+            viewer.run(RunRequest(tolerance_m=tolerance, apply_azimuth=azimuth))
+    assert len(calls) == 1
+
+
+def test_the_archive_is_cleaned_before_it_is_matched():
+    """The cleaning report on screen must describe the archive the match searched. A report
+    cleaning rejects (here, a 40 m/s vessel) sitting right on the dark vessel must not
+    explain it."""
+    import numpy as np
+    import pandas as pd
+    from shapely import Point
+
+    from darkvessel.data.synthetic import ACQUIRED_AT, _by_name
+
+    raw = _ais()
+    raw["speed_ms"] = np.nan
+    dark = _by_name("dark_vessel")
+    bogus = raw.iloc[[0]].copy()
+    bogus["mmsi"] = "219999999"
+    bogus["timestamp"] = pd.Timestamp(ACQUIRED_AT)
+    bogus["speed_ms"] = 40.0
+    bogus = bogus.set_geometry([Point(dark.x, dark.y)], crs=raw.crs)
+    dirty = pd.concat([raw, bogus], ignore_index=True)
+
+    shown = build(_scene(), dirty, RunRequest(tolerance_m=TOLERANCE_M))
+    assert shown["ais"]["removed"]["implausible_speed"] == 1
+    assert shown["counts"]["dark"] == 1
+
+
+# ───────────────────────────── the static bake ─────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def baked(tmp_path_factory):
+    from darkvessel.web.bake import bake
+
+    out = tmp_path_factory.mktemp("bake")
+    default = RunRequest(tolerance_m=TOLERANCE_M)
+    viewer = Viewer(_scene(), _ais())
+    return viewer, default, bake(viewer, default, out), out
+
+
+def _baked_run(baked, **values):
+    viewer, default, manifest, out = baked
+    flat = 0
+    for key in manifest["order"]:
+        grid = manifest["grid"][key]
+        flat = flat * len(grid) + grid.index(values.get(key, manifest["defaults"][key]))
+    return json.loads((out / "runs" / f"{manifest['runs'][flat]}.json").read_text())
+
+
+def test_the_bake_covers_every_control_position(baked):
+    _, _, manifest, _ = baked
+    expected = 1
+    for key in manifest["order"]:
+        expected *= len(manifest["grid"][key])
+    assert len(manifest["runs"]) == expected
+    assert manifest["distinct_runs"] < len(manifest["runs"])  # identical outcomes collapse
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {},
+        {"apply_azimuth": False},
+        {"tolerance_m": 25.0},
+        {"max_gap_minutes": 1.0, "detector_threshold": 0.95},
+        {"max_gap_minutes": 120.0, "tolerance_m": 1000.0, "apply_azimuth": False},
+    ],
+)
+def test_a_baked_run_is_exactly_the_live_run(baked, values):
+    """Shared equivalence classes must never change an answer, only save the work."""
+    from dataclasses import replace
+
+    viewer, default, _, _ = baked
+    live = viewer.run(replace(default, **values))
+    live.pop("config")
+    assert _baked_run(baked, **values) == json.loads(json.dumps(live))
+
+
+def test_the_bake_reproduces_the_azimuth_story(baked):
+    assert _baked_run(baked)["counts"]["dark"] == 1
+    assert _baked_run(baked, apply_azimuth=False)["counts"]["dark"] == 2

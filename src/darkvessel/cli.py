@@ -12,6 +12,7 @@ from pathlib import Path
 import geopandas as gpd
 
 from darkvessel import config as config_module
+from darkvessel.data.ais import clean
 from darkvessel.data.scene import read_scene
 from darkvessel.data.synthetic import write_synthetic
 from darkvessel.data.tiling import Tiling
@@ -66,7 +67,9 @@ def _run(config_path: Path) -> int:
     cfg = config_module.load(config_path)
 
     scene = read_scene(cfg.scene_dir)
-    ais = gpd.read_file(cfg.ais_path) if cfg.ais_path else None
+    # Cleaned before matching, as in the viewer: a dark claim is only as good as the archive
+    # searched, and the viewer's cleaning report must describe the same archive this run used.
+    ais = clean(gpd.read_file(cfg.ais_path))[0] if cfg.ais_path else None
     tiling = Tiling(tile_px=cfg.tile_px, overlap_px=cfg.overlap_px)
     detector = BrightPixelDetector(threshold=cfg.detector_threshold)
 
@@ -120,39 +123,45 @@ def _render(config_path: Path, out_dir: Path) -> int:
     """Bake the viewer plus one run into a folder any static host can serve."""
     from darkvessel.render import scene_png
     from darkvessel.web.app import STATIC_DIR
-    from darkvessel.web.payload import RunRequest, build
+    from darkvessel.web.bake import bake
+    from darkvessel.web.payload import RunRequest, Viewer
 
     cfg = config_module.load(config_path)
     scene = read_scene(cfg.scene_dir)
     ais = gpd.read_file(cfg.ais_path) if cfg.ais_path else None
 
-    payload = build(
-        scene,
-        ais,
-        RunRequest(
-            tolerance_m=cfg.tolerance_m,
-            max_gap_minutes=cfg.max_gap.total_seconds() / 60,
-            detector_threshold=cfg.detector_threshold,
-            tile_px=cfg.tile_px,
-            overlap_px=cfg.overlap_px,
-            apply_azimuth=cfg.geometry is not None,
-        ),
+    viewer = Viewer(scene, ais)
+    default = RunRequest(
+        tolerance_m=cfg.tolerance_m,
+        max_gap_minutes=cfg.max_gap.total_seconds() / 60,
+        detector_threshold=cfg.detector_threshold,
+        tile_px=cfg.tile_px,
+        overlap_px=cfg.overlap_px,
+        apply_azimuth=cfg.geometry is not None,
     )
+    payload = viewer.run(default)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "assets").mkdir(exist_ok=True)
     (out_dir / "data").mkdir(exist_ok=True)
 
-    for name in ("index.html", "styles.css", "app.js"):
-        shutil.copyfile(STATIC_DIR / name, out_dir / name)
+    for source in STATIC_DIR.iterdir():
+        if source.is_file():
+            shutil.copyfile(source, out_dir / source.name)
     (out_dir / "assets" / "scene.png").write_bytes(scene_png(scene.image))
     (out_dir / "data" / "run.json").write_text(json.dumps(payload))
+    manifest = bake(viewer, default, out_dir / "data")
+    (out_dir / "data" / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")))
 
     counts = payload["counts"]
     print(f"static viewer written to {out_dir}")
     print(
         f"  {counts['total']} detections · {counts['matched']} matched, {counts['dark']} dark, "
         f"{counts['structure']} at a fixed structure"
+    )
+    print(
+        f"  {len(manifest['runs'])} control positions baked into "
+        f"{manifest['distinct_runs']} distinct runs"
     )
     print(f"  serve it with any static host, e.g. python -m http.server -d {out_dir}")
     return 0
