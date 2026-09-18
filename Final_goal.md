@@ -33,14 +33,14 @@ The finished project answers three questions:
 - [ ] **Concentration analysis and static map** — where dark detections cluster, normalised
       for how often each area was imaged.
 - [ ] **Write-up** — README/report covering method, the design decisions, results and their limits.
-- [ ] **Published** — code on GitHub with CI green; the viewer on GitHub Pages.
+- [x] **Published** — code on GitHub with CI green; the viewer on GitHub Pages.
 
 ## Milestones
 
 | # | Milestone | Done when |
 |---|---|---|
 | 1 | Core + viewer | ✅ 150 tests pass, viewer works in browser |
-| 2 | Online | Repo pushed, CI green, Pages bundle live |
+| 2 | Online | ✅ Repo pushed, CI green, Pages bundle live |
 | 3 | First real scene | One Sentinel-1 scene + DMA AIS runs end to end; results inspected by eye in the viewer |
 | 4 | Real detector | Trained model beats the CFAR baseline on LS-SSDD test split; plugged into the pipeline |
 | 5 | Context | Each detection carries its contextual variables; missing values are absent, not zero |

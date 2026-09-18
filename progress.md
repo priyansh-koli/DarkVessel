@@ -37,7 +37,8 @@ darkvessel run --config configs/pipeline.yaml
 | Tier 1 — core pipeline (tiling, pixel→ground, AIS interpolation, azimuth correction, optimal matching, structure register, recurrence clustering, CLI) | **Done**, tested |
 | AIS ingestion — DMA CSV reader and cleaning rules with per-rule counts | **Done**, tested against the format; not yet run on a real DMA day file |
 | Viewer — FastAPI live app + static bundle | **Done**, checked in a real browser at desktop and phone widths |
-| Deployment — Dockerfile, CI, GitHub Pages workflow | **Written**; the Dockerfile has never been built (no docker on the dev machine); workflows have never run (no remote) |
+| Deployment — CI, GitHub Pages | **Live.** CI green on 3.9 and 3.12; static viewer at https://priyansh-koli.github.io/DarkVessel/ |
+| Deployment — Dockerfile (live app) | **Written, never built** (no docker on the dev machine) |
 | Detector | Deterministic stand-in (`BrightPixelDetector`) only — no trained model |
 | Tier 2 — Earth Engine export and contextual variables | **Not started** (`context/gee_layers.py` is a no-op) |
 | Tier 3 — CNN detector on LS-SSDD, contrastive embeddings | **Not started** |
@@ -45,19 +46,19 @@ darkvessel run --config configs/pipeline.yaml
 | Real data | **None yet** — everything runs on the synthetic fixture |
 
 - Tests: 150 passing. Lint: clean.
-- Git: local repo on `main`, **no remote configured yet**.
+- Git: `main` tracks `origin` = https://github.com/priyansh-koli/DarkVessel (public). Every push
+  to `main` runs CI and republishes the viewer.
 - Python: the dev machine has only system Python 3.9.6, so the project targets `>=3.9`.
 
 ## Next steps
 
 In rough priority order — see [Final_goal.md](Final_goal.md) for why.
 
-1. Push to a GitHub remote so CI and the Pages workflow actually run for the first time.
-2. Run the pipeline on one real Sentinel-1 scene and the matching DMA AIS day file.
-3. Replace the stand-in detector with a real one (CFAR baseline first, then a CNN trained on
+1. Run the pipeline on one real Sentinel-1 scene and the matching DMA AIS day file.
+2. Replace the stand-in detector with a real one (CFAR baseline first, then a CNN trained on
    LS-SSDD).
-4. Build the Earth Engine contextual layers (distance to shore, depth, fishing effort, EEZ).
-5. Archive-wide run and the concentration analysis and map.
+3. Build the Earth Engine contextual layers (distance to shore, depth, fishing effort, EEZ).
+4. Archive-wide run and the concentration analysis and map.
 
 ## Open questions
 
@@ -95,6 +96,17 @@ In rough priority order — see [Final_goal.md](Final_goal.md) for why.
 ---
 
 ## Session log
+
+### 2026-09-18 — published to GitHub
+
+- Rewrote history into a single commit authored by Priyansh Koli, then pushed to
+  https://github.com/priyansh-koli/DarkVessel.
+- First push was rejected: the saved Personal Access Token lacked the `workflow` scope needed
+  to push `.github/workflows/`. Fixed with a new classic token (`repo` + `workflow`).
+- Enabled Pages (Settings → Pages → Source: GitHub Actions) and re-ran the publish workflow.
+- Verified: `ci` passed; `publish viewer` passed on its second attempt; the live site serves
+  `index.html`, `assets/scene.png` and `data/run.json` (counts 5 total / 4 matched / 1 dark).
+  `/api/health` returns 404 HTML there, so the viewer correctly stays in static mode.
 
 ### 2026-09-18 — continuity files, licence, pre-push cleanup
 
