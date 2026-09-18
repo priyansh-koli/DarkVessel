@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "darkvessel"
+version = "0.1.0"
+description = "Dark vessel detection: Sentinel-1 SAR fused with AIS. Tier-1 core."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Priyansh Koli", email = "126262537+priyansh-koli@users.noreply.github.com" }]
+
+# Runs with no GPU, no network, no credentials. torch/earthengine are extras (Tier 3/2).
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "rasterio",
+    "affine",
+    "geopandas",
+    "pyogrio",
+    "shapely",
+    "pyproj",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+detector = ["torch", "torchvision"]
+gee = ["earthengine-api"]
+web = ["fastapi", "uvicorn[standard]", "pillow"]
+dev = ["pytest", "ruff", "httpx", "fastapi", "uvicorn[standard]", "pillow"]
+
+[project.scripts]
+darkvessel = "darkvessel.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+darkvessel = ["web/static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI declares request parameters by calling these in argument defaults, by design.
+extend-immutable-calls = ["fastapi.Query", "fastapi.Path", "fastapi.Body", "fastapi.Depends"]

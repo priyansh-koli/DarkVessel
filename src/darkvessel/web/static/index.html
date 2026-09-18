@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>darkvessel — SAR/AIS fusion viewer</title>
+<meta name="description" content="Inspect Sentinel-1 SAR detections fused with AIS declarations, and see why a vessel was reported dark.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🛰️</text></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#viewer">Skip to viewer</a>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <div>
+      <h1>darkvessel</h1>
+      <p class="brand-sub">Sentinel-1 SAR fused with AIS declarations</p>
+    </div>
+  </div>
+
+  <dl class="scene-meta" id="scene-meta" aria-label="Scene metadata"></dl>
+
+  <div class="mode" id="mode-badge" role="status">
+    <span class="dot" aria-hidden="true"></span><span class="mode-label">connecting…</span>
+  </div>
+</header>
+
+<div class="counts" id="counts" role="group" aria-label="Detection counts — select to filter">
+  <!-- filled by app.js -->
+</div>
+
+<main class="layout">
+
+  <!-- ─────────────── controls ─────────────── -->
+  <aside class="col col-controls" aria-label="Run controls">
+    <section class="panel">
+      <h2 class="panel-title">Fusion</h2>
+
+      <div class="field">
+        <label for="tolerance">Match tolerance</label>
+        <div class="field-row">
+          <input type="range" id="tolerance" min="25" max="1000" step="25" value="200">
+          <output for="tolerance" id="tolerance-out" class="num">200 m</output>
+        </div>
+        <p class="hint">How far a declared position may sit from a detection and still explain it.</p>
+      </div>
+
+      <div class="field">
+        <label for="maxgap">Max AIS gap</label>
+        <div class="field-row">
+          <input type="range" id="maxgap" min="1" max="120" step="1" value="10">
+          <output for="maxgap" id="maxgap-out" class="num">10 min</output>
+        </div>
+        <p class="hint">Beyond this, a lone report is too stale to place the vessel at all.</p>
+      </div>
+
+      <div class="field field-toggle">
+        <label class="switch" for="azimuth">
+          <input type="checkbox" id="azimuth" checked>
+          <span class="switch-text">
+            Azimuth-shift correction
+            <span class="hint">Move each declaration to where the radar would draw a moving vessel.</span>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 class="panel-title">Detector</h2>
+      <div class="field">
+        <label for="threshold">Brightness threshold</label>
+        <div class="field-row">
+          <input type="range" id="threshold" min="0.05" max="1" step="0.05" value="0.5">
+          <output for="threshold" id="threshold-out" class="num">0.50</output>
+        </div>
+        <p class="hint">The stand-in detector flags pixels at or above this, one detection per blob.</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 class="panel-title">Structure register</h2>
+      <p class="hint hint-block">
+        Recurrence needs a multi-scene archive. On a single scene you can stand in for one by
+        registering known fixed positions — a turbine list, say — and watch dark detections
+        that sit on them reclassify.
+      </p>
+      <button type="button" class="btn" id="add-structure" aria-pressed="false">
+        <span class="btn-icon" aria-hidden="true">✛</span> Register by clicking the scene
+      </button>
+      <div class="field" style="margin-top:14px">
+        <label for="register-tolerance">Same-position tolerance</label>
+        <div class="field-row">
+          <input type="range" id="register-tolerance" min="25" max="500" step="25" value="100">
+          <output for="register-tolerance" id="register-tolerance-out" class="num">100 m</output>
+        </div>
+      </div>
+      <ul class="chiplist" id="register-list" aria-label="Registered positions"></ul>
+      <button type="button" class="btn btn-quiet" id="clear-structures" hidden>Clear register</button>
+    </section>
+
+    <section class="panel" id="ais-panel">
+      <h2 class="panel-title">AIS search space</h2>
+      <div id="ais-summary"></div>
+    </section>
+
+    <button type="button" class="btn btn-quiet" id="reset">Reset to defaults</button>
+  </aside>
+
+  <!-- ─────────────── viewer ─────────────── -->
+  <section class="col col-viewer" aria-label="Scene viewer">
+    <div class="viewer-head">
+      <h2 class="panel-title">Scene</h2>
+      <div class="viewer-tools">
+        <button type="button" class="icon-btn" id="zoom-out" aria-label="Zoom out">−</button>
+        <span class="num zoom-level" id="zoom-level" aria-live="off">100%</span>
+        <button type="button" class="icon-btn" id="zoom-in" aria-label="Zoom in">+</button>
+        <button type="button" class="icon-btn icon-btn-wide" id="zoom-reset">Fit</button>
+      </div>
+    </div>
+
+    <div class="stage" id="viewer" tabindex="0" role="application"
+         aria-label="SAR scene with detection overlay. Drag to pan, scroll to zoom, Tab to reach detections.">
+      <div class="stage-inner" id="stage-inner">
+        <canvas id="scene-canvas" aria-hidden="true"></canvas>
+        <svg id="overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
+      </div>
+      <div class="stage-state" id="stage-state" hidden></div>
+      <div class="scalebar" id="scalebar" aria-hidden="true"><span></span><em></em></div>
+    </div>
+
+    <ul class="legend" aria-label="Legend">
+      <li><span class="key key-matched" aria-hidden="true"></span>Matched — a declaration explains it</li>
+      <li><span class="key key-dark" aria-hidden="true"></span>Dark — searched, nothing explains it</li>
+      <li><span class="key key-structure" aria-hidden="true"></span>Structure — a registered fixed position</li>
+      <li><span class="key key-unsearched" aria-hidden="true"></span>Unsearched — no AIS supplied</li>
+      <li><span class="key key-decl" aria-hidden="true"></span>AIS declaration</li>
+      <li><span class="key key-shift" aria-hidden="true"></span>Azimuth shift applied</li>
+    </ul>
+
+    <section class="panel panel-table">
+      <h2 class="panel-title">Detections <span class="count-hint" id="table-count"></span></h2>
+      <div class="table-wrap">
+        <table id="detections-table">
+          <caption class="sr-only">Every detection in the scene, with how it was classified.</caption>
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">Status</th>
+              <th scope="col">MMSI</th>
+              <th scope="col" class="right">Distance</th>
+              <th scope="col">Basis</th>
+              <th scope="col" class="right">Az. shift</th>
+            </tr>
+          </thead>
+          <tbody id="detections-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <!-- ─────────────── inspector ─────────────── -->
+  <aside class="col col-inspector" aria-label="Detection inspector">
+    <section class="panel panel-inspector" id="inspector" aria-live="polite">
+      <!-- filled by app.js -->
+    </section>
+  </aside>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+name: publish viewer
+
+# Builds the static viewer bundle and publishes it to GitHub Pages.
+# One-time setup in the repo: Settings -> Pages -> Source: "GitHub Actions".
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A queued run should supersede an in-flight one, but never cancel a publish midway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[web]"
+
+      # "Generate the images before deploying": `render` writes the scene PNG and bakes one
+      # full pipeline run, with every detection crop inlined, into data/run.json.
+      - run: darkvessel synthesise --out data/synthetic
+      - run: darkvessel render --config configs/pipeline.yaml --out site
+
+      - name: the bundle must be self-contained
+        run: |
+          test -f site/index.html
+          test -f site/assets/scene.png
+          test -f site/data/run.json
+          python -c "import json; d=json.load(open('site/data/run.json')); assert d['counts']['total']==5, d['counts']"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

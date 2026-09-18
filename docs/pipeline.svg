@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 940" width="1100" height="940"
+     role="img" aria-labelledby="t d">
+<title id="t">darkvessel pipeline</title>
+<desc id="d">Two input paths — a Sentinel-1 SAR scene and an AIS archive — are prepared
+separately, fused by an optimal one-to-one assignment within a distance tolerance, then
+filtered through a structure register, producing four possible statuses: matched, structure,
+dark and unsearched.</desc>
+
+<style>
+  .bg    { fill: #0b1017; }
+  .card  { fill: #151d29; stroke: #27334454; stroke-width: 1; rx: 10; }
+  .band  { fill: #101722; stroke: #243040; stroke-width: 1; rx: 12; }
+  .h     { font: 600 13px ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+           fill: #7d8fa6; letter-spacing: 1.2px; }
+  .ttl   { font: 600 22px ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+           fill: #e8eef7; }
+  .sub   { font: 400 14px ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+           fill: #8b9db4; }
+  .n     { font: 600 16px ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+           fill: #e8eef7; }
+  .s     { font: 400 13px ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+           fill: #8b9db4; }
+  .mono  { font: 400 12.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; fill: #8b9db4; }
+  .flow  { stroke: #3d4c61; stroke-width: 2; fill: none; marker-end: url(#a); }
+  .fix   { font: 700 12px ui-sans-serif,-apple-system,sans-serif; fill: #0b1017; }
+  .chip  { font: 600 15px ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+</style>
+
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+    <path d="M0 0 L10 5 L0 10 z" fill="#3d4c61"/>
+  </marker>
+</defs>
+
+<rect class="bg" width="1100" height="940"/>
+
+<text class="ttl" x="40" y="42">How one scene becomes a dark-vessel claim</text>
+<text class="sub" x="40" y="66">Two paths are prepared independently, then fused. Circled numbers mark the three places built to avoid silent errors.</text>
+
+<!-- ───────────── input bands ───────────── -->
+<rect class="band" x="34" y="92" width="496" height="404"/>
+<rect class="band" x="570" y="92" width="496" height="404"/>
+<text class="h" x="54" y="118">SAR PATH — WHAT THE RADAR SAW</text>
+<text class="h" x="590" y="118">AIS PATH — WHAT WAS DECLARED</text>
+
+<!-- left column -->
+<rect class="card" x="54" y="134" width="456" height="66"/>
+<text class="n" x="74" y="162">Sentinel-1 GRD scene</text>
+<text class="s" x="74" y="182">pixels, the affine transform, and the acquisition instant</text>
+
+<rect class="card" x="54" y="222" width="456" height="72"/>
+<circle cx="489" cy="240" r="11" fill="#4ea8de"/><text class="fix" x="489" y="245" text-anchor="middle">1</text>
+<text class="n" x="74" y="250">Overlapping tiles, each owning one core</text>
+<text class="s" x="74" y="270">Every pixel sits in exactly one core, so an edge target is</text>
+<text class="s" x="74" y="286">claimed once — no merge radius to tune afterwards.</text>
+
+<rect class="card" x="54" y="316" width="456" height="66"/>
+<text class="n" x="74" y="344">Detector — a parameter, never an import</text>
+<text class="s" x="74" y="364">A stand-in and a trained CNN satisfy the same Protocol.</text>
+
+<rect class="card" x="54" y="404" width="456" height="66"/>
+<text class="n" x="74" y="432">Pixel → ground</text>
+<text class="s" x="74" y="452">Each detection placed via the scene's transform.</text>
+
+<!-- right column -->
+<rect class="card" x="590" y="134" width="456" height="66"/>
+<text class="n" x="610" y="162">AIS archive</text>
+<text class="s" x="610" y="182">the Danish Maritime Authority's daily CSV, or any archive</text>
+
+<rect class="card" x="590" y="222" width="456" height="72"/>
+<text class="n" x="610" y="250">Clean — and count what every rule removed</text>
+<text class="s" x="610" y="270">A silent rule that drops the one report which would have</text>
+<text class="s" x="610" y="286">explained a detection looks exactly like a dark vessel.</text>
+
+<rect class="card" x="590" y="316" width="456" height="66"/>
+<text class="n" x="610" y="340">Interpolate to the acquisition instant</text>
+<text class="s" x="610" y="360">Bracketed → interpolated. Otherwise the nearest report,</text>
+<text class="s" x="610" y="376">flagged as such. Nothing is extrapolated past a track's end.</text>
+
+<rect class="card" x="590" y="404" width="456" height="66"/>
+<text class="n" x="610" y="428">Azimuth-shift correction</text>
+<text class="s" x="610" y="448">A moving vessel is drawn off along-track by its Doppler</text>
+<text class="s" x="610" y="464">history. Uncorrected, a fast ship reads as dark.</text>
+
+<!-- vertical flows within columns -->
+<path class="flow" d="M282 200 V216"/>
+<path class="flow" d="M282 294 V310"/>
+<path class="flow" d="M282 382 V398"/>
+<path class="flow" d="M818 200 V216"/>
+<path class="flow" d="M818 294 V310"/>
+<path class="flow" d="M818 382 V398"/>
+
+<!-- converge -->
+<path class="flow" d="M282 470 V516 H520" marker-end="none" stroke="#3d4c61"/>
+<path class="flow" d="M818 470 V516 H580" marker-end="none" stroke="#3d4c61"/>
+<path class="flow" d="M550 516 V548"/>
+
+<!-- ───────────── fusion ───────────── -->
+<rect class="card" x="150" y="556" width="800" height="86" fill="#17202e" stroke="#35506b"/>
+<circle cx="928" cy="576" r="11" fill="#4ea8de"/><text class="fix" x="928" y="581" text-anchor="middle">2</text>
+<text class="n" x="176" y="586">Optimal one-to-one assignment, inside the tolerance</text>
+<text class="s" x="176" y="608">Maximum number of matches first, then least total distance — one linear-assignment call.</text>
+<text class="s" x="176" y="626">A greedy “closest pair first” matcher can consume the declaration another detection needed.</text>
+
+<path class="flow" d="M400 642 V678"/>
+<path class="flow" d="M700 642 V678"/>
+<text class="mono" x="352" y="666">explained</text>
+<text class="mono" x="712" y="666">unexplained</text>
+
+<!-- ───────────── after fusion ───────────── -->
+<rect class="card" x="560" y="686" width="390" height="76"/>
+<circle cx="928" cy="706" r="11" fill="#4ea8de"/><text class="fix" x="928" y="711" text-anchor="middle">3</text>
+<text class="n" x="582" y="714">Structure register</text>
+<text class="s" x="582" y="734">Recurrence, not appearance: a position carrying a detection</text>
+<text class="s" x="582" y="750">acquisition after acquisition is not a ship. Grouping is order-free.</text>
+
+<path class="flow" d="M400 678 V830"/>
+<path class="flow" d="M660 762 V830"/>
+<path class="flow" d="M850 762 V830"/>
+
+<!-- statuses -->
+<rect x="300" y="830" width="200" height="46" rx="9" fill="#3fb95018" stroke="#3fb95070"/>
+<text class="chip" x="400" y="859" text-anchor="middle" fill="#3fb950">matched</text>
+
+<rect x="560" y="830" width="200" height="46" rx="9" fill="#b98cff18" stroke="#b98cff70"/>
+<text class="chip" x="660" y="859" text-anchor="middle" fill="#b98cff">structure</text>
+
+<rect x="780" y="830" width="140" height="46" rx="9" fill="#ff6b5e18" stroke="#ff6b5e70"/>
+<text class="chip" x="850" y="859" text-anchor="middle" fill="#ff6b5e">dark</text>
+
+<rect x="40" y="830" width="230" height="46" rx="9" fill="#8b98a814" stroke="#8b98a860"/>
+<text class="chip" x="155" y="859" text-anchor="middle" fill="#9aa8ba">unsearched</text>
+<text class="s" x="40" y="898">No AIS was supplied at all — a detection</text>
+<text class="s" x="40" y="914">nobody has tried to explain, not a dark claim.</text>
+
+<!-- Routed around the fusion card: an unsearched detection never reaches the matcher. -->
+<path class="flow" d="M155 470 V500 H100 V800 H155 V830" stroke="#2b3748" stroke-dasharray="5 4"/>
+
+<text class="s" x="560" y="898">Structure exclusion runs strictly after matching: a detection AIS explains stays matched,</text>
+<text class="s" x="560" y="914">whatever else happens to stand at that coordinate.</text>
+</svg>

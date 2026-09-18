@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is the floor this project targets (the development machine has only the
+        # macOS system Python); 3.12 is what a server should actually run.
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check src/ tests/
+      - run: pytest -q
+      - name: the quick start must keep printing what the README quotes
+        run: |
+          darkvessel synthesise --out data/synthetic
+          darkvessel run --config configs/pipeline.yaml | tee run.txt
+          grep -q "4 matched, 1 dark, 0 at a fixed structure" run.txt

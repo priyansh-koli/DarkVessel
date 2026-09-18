@@ -1,0 +1,11 @@
+scene_dir: data/synthetic/scene
+ais_path: data/synthetic/ais.gpkg
+tolerance_m: 200
+max_gap_minutes: 10
+tile_px: 128
+overlap_px: 32
+detector_threshold: 0.5
+output_path: outputs/detections.gpkg
+geometry:
+  heading_deg: 350.0
+  incidence_deg: 35.0
