@@ -1,0 +1,15 @@
+loaded 4800 train and 1200 validation sub-images
+  audit 6000 images, 3637 boxes read
+  audit   image mostly outside the swath (kept, no-data masked): 220  (e.g. 02_10_1, 02_10_30, 02_11_1, 02_11_30, 02_12_1)
+epoch   1  loss 3.65525  val AP 0.060  F1 0.091 @ 0.21  anomalies {'gradient clipped': 114, 'crop outside the swath (re-drawn)': 23}
+epoch   2  loss 2.56146  val AP 0.168  F1 0.254 @ 0.11  anomalies {'gradient clipped': 84, 'crop outside the swath (re-drawn)': 29}
+epoch   3  loss 2.39793  val AP 0.542  F1 0.566 @ 0.25  anomalies {'gradient clipped': 76, 'crop outside the swath (re-drawn)': 26}
+epoch   4  loss 2.17408  val AP 0.605  F1 0.633 @ 0.20  anomalies {'gradient clipped': 74, 'crop outside the swath (re-drawn)': 28}
+epoch   5  loss 1.94586  val AP 0.328  F1 0.416 @ 0.18  anomalies {'gradient clipped': 64, 'crop outside the swath (re-drawn)': 33}
+epoch   6  loss 1.91649  val AP 0.270  F1 0.380 @ 0.22  anomalies {'crop outside the swath (re-drawn)': 41, 'gradient clipped': 71}
+epoch   7  loss 1.81621  val AP 0.658  F1 0.674 @ 0.22  anomalies {'gradient clipped': 56, 'crop outside the swath (re-drawn)': 25}
+epoch   8  loss 1.69059  val AP 0.484  F1 0.543 @ 0.22  anomalies {'gradient clipped': 45, 'crop outside the swath (re-drawn)': 33}
+epoch   9  loss 1.64587  val AP 0.533  F1 0.573 @ 0.19  anomalies {'gradient clipped': 52, 'crop outside the swath (re-drawn)': 23}
+epoch  10  loss 1.60024  val AP 0.525  F1 0.559 @ 0.30  anomalies {'gradient clipped': 39, 'crop outside the swath (re-drawn)': 29}
+epoch  11  loss 1.63223  val AP 0.704  F1 0.686 @ 0.21  anomalies {'gradient clipped': 32, 'crop outside the swath (re-drawn)': 32}
+epoch  12  loss 1.63319  val AP 0.693  F1 0.665 @ 0.20  anomalies {'crop outside the swath (re-drawn)': 36, 'gradient clipped': 40}

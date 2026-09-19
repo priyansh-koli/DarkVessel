@@ -1,0 +1,805 @@
+{
+  "model": "CentreNet",
+  "width": 16,
+  "norm": "batch",
+  "trained_on": "LS-SSDD-v1.0 train scenes 01,02,03,04,06,07,08,09",
+  "validated_on": "LS-SSDD-v1.0 scenes 05,10",
+  "best_epoch": 30,
+  "val_ap": 0.7438,
+  "val_best_f1": {
+    "threshold": 0.2986,
+    "precision": 0.7664,
+    "recall": 0.6266,
+    "f1": 0.6895,
+    "true_positives": 443,
+    "false_positives": 135,
+    "false_negatives": 264
+  },
+  "threshold": 0.29859659075737,
+  "config": {
+    "epochs": 40,
+    "steps_per_epoch": 150,
+    "batch_size": 16,
+    "crop_px": 256,
+    "ship_fraction": 0.5,
+    "lr": 0.002,
+    "weight_decay": 0.0001,
+    "grad_clip": 10.0,
+    "patience": 8,
+    "width": 16,
+    "norm": "batch",
+    "recalibration_batches": 40,
+    "ema_decay": 0.998,
+    "seed": 0
+  },
+  "data_audit": {
+    "image mostly outside the swath (kept, no-data masked)": 220
+  },
+  "training_anomalies": {
+    "gradient clipped": 1395,
+    "crop outside the swath (re-drawn)": 1185,
+    "early stop (validation plateau)": 1
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 3.65525,
+      "val_ap": 0.1904,
+      "val_best_f1": {
+        "threshold": 0.0386,
+        "precision": 0.3225,
+        "recall": 0.2673,
+        "f1": 0.2923,
+        "true_positives": 189,
+        "false_positives": 397,
+        "false_negatives": 518
+      },
+      "lr": 0.001996917333733128,
+      "anomalies": {
+        "gradient clipped": 114,
+        "crop outside the swath (re-drawn)": 23
+      },
+      "minutes": 1.6
+    },
+    {
+      "epoch": 2,
+      "train_loss": 2.56146,
+      "val_ap": 0.2689,
+      "val_best_f1": {
+        "threshold": 0.0508,
+        "precision": 0.4629,
+        "recall": 0.3352,
+        "f1": 0.3888,
+        "true_positives": 237,
+        "false_positives": 275,
+        "false_negatives": 470
+      },
+      "lr": 0.0019876883405951376,
+      "anomalies": {
+        "gradient clipped": 84,
+        "crop outside the swath (re-drawn)": 29
+      },
+      "minutes": 3.2
+    },
+    {
+      "epoch": 3,
+      "train_loss": 2.39793,
+      "val_ap": 0.26,
+      "val_best_f1": {
+        "threshold": 0.0702,
+        "precision": 0.3382,
+        "recall": 0.3635,
+        "f1": 0.3504,
+        "true_positives": 257,
+        "false_positives": 503,
+        "false_negatives": 450
+      },
+      "lr": 0.0019723699203976768,
+      "anomalies": {
+        "gradient clipped": 76,
+        "crop outside the swath (re-drawn)": 26
+      },
+      "minutes": 4.7
+    },
+    {
+      "epoch": 4,
+      "train_loss": 2.17408,
+      "val_ap": 0.3158,
+      "val_best_f1": {
+        "threshold": 0.1,
+        "precision": 0.4108,
+        "recall": 0.3876,
+        "f1": 0.3988,
+        "true_positives": 274,
+        "false_positives": 393,
+        "false_negatives": 433
+      },
+      "lr": 0.0019510565162951536,
+      "anomalies": {
+        "gradient clipped": 74,
+        "crop outside the swath (re-drawn)": 28
+      },
+      "minutes": 6.3
+    },
+    {
+      "epoch": 5,
+      "train_loss": 1.94586,
+      "val_ap": 0.3651,
+      "val_best_f1": {
+        "threshold": 0.1136,
+        "precision": 0.3945,
+        "recall": 0.4441,
+        "f1": 0.4178,
+        "true_positives": 314,
+        "false_positives": 482,
+        "false_negatives": 393
+      },
+      "lr": 0.0019238795325112869,
+      "anomalies": {
+        "gradient clipped": 64,
+        "crop outside the swath (re-drawn)": 33
+      },
+      "minutes": 7.9
+    },
+    {
+      "epoch": 6,
+      "train_loss": 1.91649,
+      "val_ap": 0.4039,
+      "val_best_f1": {
+        "threshold": 0.1425,
+        "precision": 0.4585,
+        "recall": 0.4455,
+        "f1": 0.4519,
+        "true_positives": 315,
+        "false_positives": 372,
+        "false_negatives": 392
+      },
+      "lr": 0.0018910065241883678,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 41,
+        "gradient clipped": 71
+      },
+      "minutes": 9.5
+    },
+    {
+      "epoch": 7,
+      "train_loss": 1.81621,
+      "val_ap": 0.4877,
+      "val_best_f1": {
+        "threshold": 0.1648,
+        "precision": 0.5136,
+        "recall": 0.5092,
+        "f1": 0.5114,
+        "true_positives": 360,
+        "false_positives": 341,
+        "false_negatives": 347
+      },
+      "lr": 0.0018526401643540922,
+      "anomalies": {
+        "gradient clipped": 56,
+        "crop outside the swath (re-drawn)": 25
+      },
+      "minutes": 11.1
+    },
+    {
+      "epoch": 8,
+      "train_loss": 1.69059,
+      "val_ap": 0.5393,
+      "val_best_f1": {
+        "threshold": 0.1718,
+        "precision": 0.5085,
+        "recall": 0.5941,
+        "f1": 0.5479,
+        "true_positives": 420,
+        "false_positives": 406,
+        "false_negatives": 287
+      },
+      "lr": 0.0018090169943749475,
+      "anomalies": {
+        "gradient clipped": 45,
+        "crop outside the swath (re-drawn)": 33
+      },
+      "minutes": 12.7
+    },
+    {
+      "epoch": 9,
+      "train_loss": 1.64587,
+      "val_ap": 0.5805,
+      "val_best_f1": {
+        "threshold": 0.1945,
+        "precision": 0.5738,
+        "recall": 0.5941,
+        "f1": 0.5837,
+        "true_positives": 420,
+        "false_positives": 312,
+        "false_negatives": 287
+      },
+      "lr": 0.0017604059656000312,
+      "anomalies": {
+        "gradient clipped": 52,
+        "crop outside the swath (re-drawn)": 23
+      },
+      "minutes": 14.3
+    },
+    {
+      "epoch": 10,
+      "train_loss": 1.60024,
+      "val_ap": 0.6209,
+      "val_best_f1": {
+        "threshold": 0.2154,
+        "precision": 0.634,
+        "recall": 0.5856,
+        "f1": 0.6088,
+        "true_positives": 414,
+        "false_positives": 239,
+        "false_negatives": 293
+      },
+      "lr": 0.0017071067811865474,
+      "anomalies": {
+        "gradient clipped": 39,
+        "crop outside the swath (re-drawn)": 29
+      },
+      "minutes": 15.9
+    },
+    {
+      "epoch": 11,
+      "train_loss": 1.63223,
+      "val_ap": 0.6348,
+      "val_best_f1": {
+        "threshold": 0.2242,
+        "precision": 0.6348,
+        "recall": 0.5926,
+        "f1": 0.613,
+        "true_positives": 419,
+        "false_positives": 241,
+        "false_negatives": 288
+      },
+      "lr": 0.0016494480483301836,
+      "anomalies": {
+        "gradient clipped": 32,
+        "crop outside the swath (re-drawn)": 32
+      },
+      "minutes": 17.5
+    },
+    {
+      "epoch": 12,
+      "train_loss": 1.63319,
+      "val_ap": 0.6527,
+      "val_best_f1": {
+        "threshold": 0.2442,
+        "precision": 0.6573,
+        "recall": 0.5969,
+        "f1": 0.6256,
+        "true_positives": 422,
+        "false_positives": 220,
+        "false_negatives": 285
+      },
+      "lr": 0.0015877852522924731,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 36,
+        "gradient clipped": 40
+      },
+      "minutes": 19.0
+    },
+    {
+      "epoch": 13,
+      "train_loss": 1.52747,
+      "val_ap": 0.6711,
+      "val_best_f1": {
+        "threshold": 0.2654,
+        "precision": 0.6801,
+        "recall": 0.5983,
+        "f1": 0.6366,
+        "true_positives": 423,
+        "false_positives": 199,
+        "false_negatives": 284
+      },
+      "lr": 0.0015224985647159489,
+      "anomalies": {
+        "gradient clipped": 28,
+        "crop outside the swath (re-drawn)": 47
+      },
+      "minutes": 20.6
+    },
+    {
+      "epoch": 14,
+      "train_loss": 1.563,
+      "val_ap": 0.684,
+      "val_best_f1": {
+        "threshold": 0.2865,
+        "precision": 0.7355,
+        "recall": 0.5743,
+        "f1": 0.645,
+        "true_positives": 406,
+        "false_positives": 146,
+        "false_negatives": 301
+      },
+      "lr": 0.0014539904997395467,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 36,
+        "gradient clipped": 49
+      },
+      "minutes": 22.2
+    },
+    {
+      "epoch": 15,
+      "train_loss": 1.54384,
+      "val_ap": 0.6813,
+      "val_best_f1": {
+        "threshold": 0.2789,
+        "precision": 0.6977,
+        "recall": 0.5941,
+        "f1": 0.6417,
+        "true_positives": 420,
+        "false_positives": 182,
+        "false_negatives": 287
+      },
+      "lr": 0.00138268343236509,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 35,
+        "gradient clipped": 38
+      },
+      "minutes": 23.6
+    },
+    {
+      "epoch": 16,
+      "train_loss": 1.48579,
+      "val_ap": 0.6945,
+      "val_best_f1": {
+        "threshold": 0.3151,
+        "precision": 0.7561,
+        "recall": 0.5743,
+        "f1": 0.6527,
+        "true_positives": 406,
+        "false_positives": 131,
+        "false_negatives": 301
+      },
+      "lr": 0.0013090169943749475,
+      "anomalies": {
+        "gradient clipped": 40,
+        "crop outside the swath (re-drawn)": 35
+      },
+      "minutes": 25.1
+    },
+    {
+      "epoch": 17,
+      "train_loss": 1.48477,
+      "val_ap": 0.7024,
+      "val_best_f1": {
+        "threshold": 0.3196,
+        "precision": 0.7817,
+        "recall": 0.5672,
+        "f1": 0.6574,
+        "true_positives": 401,
+        "false_positives": 112,
+        "false_negatives": 306
+      },
+      "lr": 0.0012334453638559056,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 24,
+        "gradient clipped": 38
+      },
+      "minutes": 26.6
+    },
+    {
+      "epoch": 18,
+      "train_loss": 1.42448,
+      "val_ap": 0.7118,
+      "val_best_f1": {
+        "threshold": 0.3213,
+        "precision": 0.7765,
+        "recall": 0.57,
+        "f1": 0.6574,
+        "true_positives": 403,
+        "false_positives": 116,
+        "false_negatives": 304
+      },
+      "lr": 0.001156434465040231,
+      "anomalies": {
+        "gradient clipped": 28,
+        "crop outside the swath (re-drawn)": 32
+      },
+      "minutes": 28.1
+    },
+    {
+      "epoch": 19,
+      "train_loss": 1.4057,
+      "val_ap": 0.7139,
+      "val_best_f1": {
+        "threshold": 0.2805,
+        "precision": 0.6942,
+        "recall": 0.6294,
+        "f1": 0.6602,
+        "true_positives": 445,
+        "false_positives": 196,
+        "false_negatives": 262
+      },
+      "lr": 0.001078459095727845,
+      "anomalies": {
+        "gradient clipped": 40,
+        "crop outside the swath (re-drawn)": 24
+      },
+      "minutes": 29.7
+    },
+    {
+      "epoch": 20,
+      "train_loss": 1.45341,
+      "val_ap": 0.7077,
+      "val_best_f1": {
+        "threshold": 0.3179,
+        "precision": 0.7482,
+        "recall": 0.5842,
+        "f1": 0.6561,
+        "true_positives": 413,
+        "false_positives": 139,
+        "false_negatives": 294
+      },
+      "lr": 0.001,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 30,
+        "gradient clipped": 26
+      },
+      "minutes": 31.2
+    },
+    {
+      "epoch": 21,
+      "train_loss": 1.46187,
+      "val_ap": 0.7207,
+      "val_best_f1": {
+        "threshold": 0.3214,
+        "precision": 0.7586,
+        "recall": 0.5955,
+        "f1": 0.6672,
+        "true_positives": 421,
+        "false_positives": 134,
+        "false_negatives": 286
+      },
+      "lr": 0.0009215409042721552,
+      "anomalies": {
+        "gradient clipped": 27,
+        "crop outside the swath (re-drawn)": 47
+      },
+      "minutes": 32.8
+    },
+    {
+      "epoch": 22,
+      "train_loss": 1.43995,
+      "val_ap": 0.7307,
+      "val_best_f1": {
+        "threshold": 0.2853,
+        "precision": 0.7304,
+        "recall": 0.6322,
+        "f1": 0.6778,
+        "true_positives": 447,
+        "false_positives": 165,
+        "false_negatives": 260
+      },
+      "lr": 0.000843565534959769,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 38,
+        "gradient clipped": 29
+      },
+      "minutes": 34.3
+    },
+    {
+      "epoch": 23,
+      "train_loss": 1.4014,
+      "val_ap": 0.7301,
+      "val_best_f1": {
+        "threshold": 0.3034,
+        "precision": 0.7433,
+        "recall": 0.6266,
+        "f1": 0.68,
+        "true_positives": 443,
+        "false_positives": 153,
+        "false_negatives": 264
+      },
+      "lr": 0.0007665546361440949,
+      "anomalies": {
+        "gradient clipped": 22,
+        "crop outside the swath (re-drawn)": 30
+      },
+      "minutes": 35.9
+    },
+    {
+      "epoch": 24,
+      "train_loss": 1.39484,
+      "val_ap": 0.7279,
+      "val_best_f1": {
+        "threshold": 0.3049,
+        "precision": 0.7496,
+        "recall": 0.6223,
+        "f1": 0.6801,
+        "true_positives": 440,
+        "false_positives": 147,
+        "false_negatives": 267
+      },
+      "lr": 0.0006909830056250527,
+      "anomalies": {
+        "gradient clipped": 25,
+        "crop outside the swath (re-drawn)": 36
+      },
+      "minutes": 37.5
+    },
+    {
+      "epoch": 25,
+      "train_loss": 1.4008,
+      "val_ap": 0.7301,
+      "val_best_f1": {
+        "threshold": 0.3022,
+        "precision": 0.736,
+        "recall": 0.6308,
+        "f1": 0.6794,
+        "true_positives": 446,
+        "false_positives": 160,
+        "false_negatives": 261
+      },
+      "lr": 0.0006173165676349102,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 27,
+        "gradient clipped": 20
+      },
+      "minutes": 39.0
+    },
+    {
+      "epoch": 26,
+      "train_loss": 1.3923,
+      "val_ap": 0.7337,
+      "val_best_f1": {
+        "threshold": 0.2952,
+        "precision": 0.7313,
+        "recall": 0.6351,
+        "f1": 0.6798,
+        "true_positives": 449,
+        "false_positives": 165,
+        "false_negatives": 258
+      },
+      "lr": 0.0005460095002604533,
+      "anomalies": {
+        "gradient clipped": 26,
+        "crop outside the swath (re-drawn)": 25
+      },
+      "minutes": 40.5
+    },
+    {
+      "epoch": 27,
+      "train_loss": 1.34953,
+      "val_ap": 0.7383,
+      "val_best_f1": {
+        "threshold": 0.2893,
+        "precision": 0.7414,
+        "recall": 0.6407,
+        "f1": 0.6874,
+        "true_positives": 453,
+        "false_positives": 158,
+        "false_negatives": 254
+      },
+      "lr": 0.00047750143528405123,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 37,
+        "gradient clipped": 23
+      },
+      "minutes": 42.1
+    },
+    {
+      "epoch": 28,
+      "train_loss": 1.2871,
+      "val_ap": 0.7424,
+      "val_best_f1": {
+        "threshold": 0.2967,
+        "precision": 0.7598,
+        "recall": 0.6308,
+        "f1": 0.6893,
+        "true_positives": 446,
+        "false_positives": 141,
+        "false_negatives": 261
+      },
+      "lr": 0.00041221474770752696,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 24,
+        "gradient clipped": 14
+      },
+      "minutes": 43.6
+    },
+    {
+      "epoch": 29,
+      "train_loss": 1.31774,
+      "val_ap": 0.7428,
+      "val_best_f1": {
+        "threshold": 0.3011,
+        "precision": 0.766,
+        "recall": 0.6252,
+        "f1": 0.6885,
+        "true_positives": 442,
+        "false_positives": 135,
+        "false_negatives": 265
+      },
+      "lr": 0.00035055195166981646,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 32,
+        "gradient clipped": 19
+      },
+      "minutes": 45.1
+    },
+    {
+      "epoch": 30,
+      "train_loss": 1.30736,
+      "val_ap": 0.7438,
+      "val_best_f1": {
+        "threshold": 0.2986,
+        "precision": 0.7664,
+        "recall": 0.6266,
+        "f1": 0.6895,
+        "true_positives": 443,
+        "false_positives": 135,
+        "false_negatives": 264
+      },
+      "lr": 0.00029289321881345256,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 31,
+        "gradient clipped": 15
+      },
+      "minutes": 46.7
+    },
+    {
+      "epoch": 31,
+      "train_loss": 1.30756,
+      "val_ap": 0.7433,
+      "val_best_f1": {
+        "threshold": 0.305,
+        "precision": 0.7668,
+        "recall": 0.628,
+        "f1": 0.6905,
+        "true_positives": 444,
+        "false_positives": 135,
+        "false_negatives": 263
+      },
+      "lr": 0.00023959403439996918,
+      "anomalies": {
+        "gradient clipped": 20,
+        "crop outside the swath (re-drawn)": 34
+      },
+      "minutes": 48.3
+    },
+    {
+      "epoch": 32,
+      "train_loss": 1.31781,
+      "val_ap": 0.7437,
+      "val_best_f1": {
+        "threshold": 0.2923,
+        "precision": 0.7646,
+        "recall": 0.6294,
+        "f1": 0.6905,
+        "true_positives": 445,
+        "false_positives": 137,
+        "false_negatives": 262
+      },
+      "lr": 0.00019098300562505265,
+      "anomalies": {
+        "gradient clipped": 18,
+        "crop outside the swath (re-drawn)": 27
+      },
+      "minutes": 49.9
+    },
+    {
+      "epoch": 33,
+      "train_loss": 1.26374,
+      "val_ap": 0.7428,
+      "val_best_f1": {
+        "threshold": 0.2972,
+        "precision": 0.7538,
+        "recall": 0.6322,
+        "f1": 0.6877,
+        "true_positives": 447,
+        "false_positives": 146,
+        "false_negatives": 260
+      },
+      "lr": 0.00014735983564590781,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 31,
+        "gradient clipped": 14
+      },
+      "minutes": 51.6
+    },
+    {
+      "epoch": 34,
+      "train_loss": 1.30786,
+      "val_ap": 0.7406,
+      "val_best_f1": {
+        "threshold": 0.3155,
+        "precision": 0.7746,
+        "recall": 0.6124,
+        "f1": 0.684,
+        "true_positives": 433,
+        "false_positives": 126,
+        "false_negatives": 274
+      },
+      "lr": 0.00010899347581163222,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 27,
+        "gradient clipped": 20
+      },
+      "minutes": 53.2
+    },
+    {
+      "epoch": 35,
+      "train_loss": 1.27836,
+      "val_ap": 0.7425,
+      "val_best_f1": {
+        "threshold": 0.3252,
+        "precision": 0.8115,
+        "recall": 0.5969,
+        "f1": 0.6879,
+        "true_positives": 422,
+        "false_positives": 98,
+        "false_negatives": 285
+      },
+      "lr": 7.612046748871326e-05,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 32,
+        "gradient clipped": 13
+      },
+      "minutes": 54.7
+    },
+    {
+      "epoch": 36,
+      "train_loss": 1.30803,
+      "val_ap": 0.7433,
+      "val_best_f1": {
+        "threshold": 0.3137,
+        "precision": 0.7778,
+        "recall": 0.6139,
+        "f1": 0.6862,
+        "true_positives": 434,
+        "false_positives": 124,
+        "false_negatives": 273
+      },
+      "lr": 4.894348370484647e-05,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 29,
+        "gradient clipped": 18
+      },
+      "minutes": 56.3
+    },
+    {
+      "epoch": 37,
+      "train_loss": 1.3056,
+      "val_ap": 0.7425,
+      "val_best_f1": {
+        "threshold": 0.2994,
+        "precision": 0.7508,
+        "recall": 0.6308,
+        "f1": 0.6856,
+        "true_positives": 446,
+        "false_positives": 148,
+        "false_negatives": 261
+      },
+      "lr": 2.7630079602323442e-05,
+      "anomalies": {
+        "gradient clipped": 21,
+        "crop outside the swath (re-drawn)": 33
+      },
+      "minutes": 57.8
+    },
+    {
+      "epoch": 38,
+      "train_loss": 1.25095,
+      "val_ap": 0.7418,
+      "val_best_f1": {
+        "threshold": 0.2767,
+        "precision": 0.7083,
+        "recall": 0.6662,
+        "f1": 0.6866,
+        "true_positives": 471,
+        "false_positives": 194,
+        "false_negatives": 236
+      },
+      "lr": 1.231165940486234e-05,
+      "anomalies": {
+        "gradient clipped": 17,
+        "crop outside the swath (re-drawn)": 24
+      },
+      "minutes": 59.4
+    }
+  ]
+}

@@ -20,7 +20,7 @@ Run from the project root:
 
 ```bash
 source .venv/bin/activate          # if missing: python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
-pytest -q                           # expect: 163 passed
+pytest -q                           # expect: 185 passed
 ruff check src/ tests/              # expect: All checks passed!
 darkvessel synthesise --out data/synthetic
 darkvessel run --config configs/pipeline.yaml
@@ -28,35 +28,50 @@ darkvessel run --config configs/pipeline.yaml
 #           4 matched, 1 dark, 0 at a fixed structure, at a tolerance of 200 m
 ```
 
+Without the `detector` extra, 5 of those tests (the ones needing torch) are skipped, and pytest
+reports `180 passed, 5 skipped` — that is what CI shows, since it installs `.[dev]` only.
+
+The detector, if the LS-SSDD data is in `data/lsssdd/` (see [models/README.md](models/README.md)
+for the download):
+
+```bash
+pip install -e ".[detector]"
+darkvessel audit-data              # expect: splits clean; test 3000 sub-images, 2377 ships
+darkvessel evaluate --detector cnn # expect: test_offshore F1 0.866, test F1 0.541 (~3 min on M5)
+```
+
 ---
 
-## Current state (as of 2026-09-18)
+## Current state (as of 2026-09-19)
 
 | Area | Status |
 |---|---|
 | Tier 1 — core pipeline (tiling, pixel→ground, AIS interpolation, azimuth correction, optimal matching, structure register, recurrence clustering, CLI) | **Done**, tested |
 | AIS ingestion — DMA CSV reader and cleaning rules with per-rule counts | **Done**, tested against the format; not yet run on a real DMA day file |
-| Viewer — FastAPI live app + static bundle (every control baked), Guide and How it works pages | **Done**, every control checked in Chrome in both modes, at desktop and phone widths |
+| Viewer — FastAPI live app + static bundle (every control baked), radar display, share panel, Guide and How it works pages | **Done**, every control checked in Chrome in both modes, at desktop and phone widths. The radar display and share panel are **not yet published** (see Git below) |
 | Deployment — CI, GitHub Pages | **Live.** CI green on 3.9 and 3.12; static viewer at https://priyansh-koli.github.io/DarkVessel/ |
 | Deployment — Dockerfile (live app) | **Written, never built** (no docker on the dev machine) |
-| Detector | Deterministic stand-in (`BrightPixelDetector`) only — no trained model |
+| Detector | `stub` (synthetic, the default), `cfar` baseline, `cnn` trained on LS-SSDD — see `models/README.md`. CNN beats CFAR offshore (F1 0.87 vs 0.69) and on AP, loses inshore (0.19 vs 0.28) until land is masked. Not yet run on a real georeferenced scene |
 | Tier 2 — Earth Engine export and contextual variables | **Not started** (`context/gee_layers.py` is a no-op) |
-| Tier 3 — CNN detector on LS-SSDD, contrastive embeddings | **Not started** |
+| Tier 3 — CNN detector on LS-SSDD | **Done** (benchmarked); contrastive embeddings **not started** |
 | Analysis — archive-wide concentration analysis, static map | **Not started** |
-| Real data | **None yet** — everything runs on the synthetic fixture |
+| Real data | **Training data only.** LS-SSDD-v1.0 (real Sentinel-1 chips, labelled) is in `data/lsssdd/` (7.8 GB zip + 2.7 GB extracted, git-ignored). The pipeline itself still runs only on the synthetic fixture: no real scene or DMA AIS file yet |
 
-- Tests: 163 passing. Lint: clean.
+- Tests: 185 passing locally (180 + 5 skipped in CI, which has no torch). Lint: clean.
 - Git: `main` tracks `origin` = https://github.com/priyansh-koli/DarkVessel (public). Every push
-  to `main` runs CI and republishes the viewer.
+  to `main` runs CI and republishes the viewer. **The 2026-09-18 detector / radar / share
+  session is uncommitted** — last commit is `b2e8a20`; `models/` and the new `detect/` modules
+  are untracked. Commit and push to publish it (it also fixes Share on the live site).
 - Python: the dev machine has only system Python 3.9.6, so the project targets `>=3.9`.
 
 ## Next steps
 
 In rough priority order — see [Final_goal.md](Final_goal.md) for why.
 
-1. Run the pipeline on one real Sentinel-1 scene and the matching DMA AIS day file.
-2. Replace the stand-in detector with a real one (CFAR baseline first, then a CNN trained on
-   LS-SSDD).
+1. Run the pipeline on one real Sentinel-1 scene and the matching DMA AIS day file, with
+   `detector: cnn` — and check the CNN on calibrated backscatter (it was trained on 8-bit chips).
+2. Mask land (coastline plus a buffer) before detection: the CNN's inshore false alarms are
+   the main weakness in `models/README.md`, and more training did not fix them.
 3. Build the Earth Engine contextual layers (distance to shore, depth, fishing effort, EEZ).
 4. Archive-wide run and the concentration analysis and map.
 
@@ -67,6 +82,16 @@ In rough priority order — see [Final_goal.md](Final_goal.md) for why.
   data and the SAR literature before trusting real-world results.
 - The study area (EPSG:25832 → Danish waters) and the time range for the real archive have
   not been fixed yet.
+- **Two interpolation behaviours in `fusion/interpolate.py` need a decision** (found
+  2026-09-18, deliberately not changed because they alter results): a pair of reports
+  bracketing the acquisition is interpolated however far apart they are (`max_gap` only limits
+  a lone report); and when the acquisition precedes a track, velocity comes from the track's
+  *last* two reports, not its first two.
+- **The CNN was trained on 8-bit JPEG chips.** Its input normalisation is scale-invariant (and
+  tested), but it has not yet seen calibrated σ⁰ backscatter. Check it on one real scene
+  before trusting its detections there.
+- **How to mask land** before detection (coastline source, buffer width) — the fix for the
+  CNN's inshore false alarms.
 
 ## Things worth knowing
 
@@ -89,6 +114,20 @@ In rough priority order — see [Final_goal.md](Final_goal.md) for why.
   414 px iframe to see the real mobile layout.
 - **Python 3.9 rules:** use `from __future__ import annotations` for `X | None` hints; no
   `zip(strict=True)` or other 3.10+ features.
+- **Each detector reads `detector_threshold` in its own units:** brightness (stub), clutter
+  standard deviations (cfar; default 6.0, calibrated on validation), heatmap score (cnn; 0.30,
+  shipped in the weights). Leave it out for cfar/cnn. The viewer always runs the stub,
+  whatever the config says.
+- **For the CNN use `tile_px: 512`:** it is fully convolutional and gives the same detections at
+  any tile size, but 128 px tiles run ~4x slower than whole images.
+- **Training is seeded and deterministic enough to compare runs:** two runs with the same seed
+  agree on training loss to five decimals, which is how the BatchNorm hypotheses were tested
+  on identical weights. A full run is ~1 hour on the M5 (MPS); GroupNorm doubles that.
+- **Validation scenes 05 and 10 contain little land,** so validation scores predict offshore
+  test performance well and inshore poorly. Don't read validation F1 as an inshore number.
+- **Playwright + SVG:** `inner_text()` returns `None` for SVG `<text>`; use `text_content()`.
+  To click a detection, target `.mark-halo`, not the `.mark` group — the group's bounding box
+  includes the speed label, and its centre falls in empty space.
 - The test suite was mutation-checked: breaking tile stepping, the max-gap drop, the dark-only
   register filter, the incidence term, plateau collapsing, tile ownership, context absent
   values, crop zero-padding or the duplicate-AIS rule each turns it red.
@@ -96,6 +135,46 @@ In rough priority order — see [Final_goal.md](Final_goal.md) for why.
 ---
 
 ## Session log
+
+### 2026-09-18 — trained detector, radar scene, share fix
+
+- **Share button** did nothing in embedded browsers (editor previews, iframes): the clipboard
+  API is refused there and the `window.prompt` fallback is suppressed. Share now opens a panel
+  with the link selected, a Copy button (clipboard API, then `execCommand`), and a list of what
+  the link restores. Verified in a normal tab and in an iframe.
+- **Radar display** for the scene (default; `SAR image` switches back): phosphor-tinted
+  imagery, range rings, bearings, a CSS-driven sweep with per-blip afterglow timed to the
+  sweep, course-oriented hull glyphs for matched vessels, 20 s speed vectors, pulsing diamonds
+  for dark contacts. Payload declarations now carry `course_deg` / `speed_kn` (absent, not
+  zero, for a lone report). Reduced-motion disables the animation.
+- **Data:** LS-SSDD-v1.0 from the authors' Google Drive link (Apache-2.0), 8.3 GB zip in
+  `data/lsssdd/` (git-ignored). `detect/lsssdd.py` audits every label and split, counting each
+  rule; found one ship boxed twice in test (merged), 273 mostly-no-data sub-images, 82%
+  ship-free training images, a train/test ship-size shift. Splits clean, totals match paper.
+- **Detectors:** `detect/cfar.py` (CA-CFAR baseline), `detect/cnn.py` + `detect/train.py`
+  (centre-heatmap U-Net), `detect/evaluate.py` + `detect/benchmark.py` (threshold on val scenes
+  05/10, report on test). `detector: stub|cfar|cnn` in the run config; new CLI commands
+  `audit-data`, `train`, `evaluate`. Weights in `models/ship_centrenet.pt` (1.6 MB), meant to be
+  committed (the `models/*.pt` ignore rule was removed) but **not committed yet**.
+- **Results (test):** offshore F1 CNN 0.866 vs CFAR 0.689; inshore 0.193 vs 0.279; overall AP
+  0.626 vs 0.563. CNN 46 ms / 800 px image on the M5 GPU, CFAR 111 ms.
+- **Anomalies in training, diagnosed with seeded runs on identical weights** (logs in
+  `models/logs/`): validation AP swinging 0.27–0.70 was *not* BatchNorm statistics (two
+  recalibration experiments rejected it) but weight oscillation — fixed by evaluating and
+  shipping an EMA of the weights. Hard-negative fine-tuning on training-scene false alarms made
+  inshore test *worse* (AP 0.117 -> 0.100); not shipped.
+- **CFAR default threshold** was 5.0σ while its calibrated operating point is 6.0σ, so a config
+  leaving `detector_threshold` out did not get the calibrated baseline as documented. Default
+  is now 6.0 (found while updating this file on 2026-09-19).
+- **Phone layout:** neighbouring radar labels ("2 · 5.8 kn", "3 · 15.6 kn") collided when the
+  stage is under 520 px wide; the speed is now hidden there (still in the tooltip and inspector).
+- Verified: 185 tests (shipped-weights smoke test included), ruff clean, quick start numbers
+  unchanged, CNN consistent under pipeline tiling (512 px tiles ~2x faster than 128), viewer
+  browser checks pass in static and live modes, radar checked at phone width and with reduced
+  motion.
+- **Left undone:** nothing committed or pushed — the live site still has the old Share button.
+- **Next:** land/coastline mask before detection (the inshore gap); check the CNN on one
+  calibrated real Sentinel-1 scene (it was trained on 8-bit LS-SSDD chips).
 
 ### 2026-09-18 — viewer fixes, interactive static site, new pages, caching
 

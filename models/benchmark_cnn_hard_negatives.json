@@ -1,0 +1,49 @@
+{
+  "detector": "cnn",
+  "threshold": 0.2113,
+  "validation": {
+    "threshold": 0.2113,
+    "precision": 0.7492,
+    "recall": 0.6634,
+    "f1": 0.7037,
+    "true_positives": 469,
+    "false_positives": 157,
+    "false_negatives": 238,
+    "ap": 0.7548
+  },
+  "test": {
+    "threshold": 0.2113,
+    "precision": 0.3659,
+    "recall": 0.7371,
+    "f1": 0.489,
+    "true_positives": 1752,
+    "false_positives": 3036,
+    "false_negatives": 625,
+    "ap": 0.6188
+  },
+  "test_inshore": {
+    "threshold": 0.2113,
+    "precision": 0.1138,
+    "recall": 0.3941,
+    "f1": 0.1766,
+    "true_positives": 348,
+    "false_positives": 2711,
+    "false_negatives": 535,
+    "ap": 0.1
+  },
+  "test_offshore": {
+    "threshold": 0.2113,
+    "precision": 0.812,
+    "recall": 0.9398,
+    "f1": 0.8712,
+    "true_positives": 1404,
+    "false_positives": 325,
+    "false_negatives": 90,
+    "ap": 0.9596
+  },
+  "ms_per_800px_image": 44.1,
+  "data_audit": {
+    "image mostly outside the swath (kept, no-data masked)": 113,
+    "same ship boxed twice, IoU > 0.7 (merged)": 1
+  }
+}

@@ -1,0 +1,19 @@
+loaded 4800 train and 1200 validation sub-images
+  audit 6000 images, 3637 boxes read
+  audit   image mostly outside the swath (kept, no-data masked): 220  (e.g. 02_10_1, 02_10_30, 02_11_1, 02_11_30, 02_12_1)
+fine-tuning from models/ship_centrenet_stage1.pt
+mined 12751 false alarms in 1548 training sub-images
+epoch   1  loss 1.55091  val AP 0.748  F1 0.691 @ 0.26  anomalies {'crop outside the swath (re-drawn)': 20, 'gradient clipped': 44}
+epoch   2  loss 1.55984  val AP 0.751  F1 0.692 @ 0.24  anomalies {'crop outside the swath (re-drawn)': 18, 'gradient clipped': 37}
+epoch   3  loss 1.54447  val AP 0.750  F1 0.695 @ 0.24  anomalies {'gradient clipped': 29, 'crop outside the swath (re-drawn)': 14}
+epoch   4  loss 1.56911  val AP 0.751  F1 0.691 @ 0.22  anomalies {'crop outside the swath (re-drawn)': 16, 'gradient clipped': 28}
+epoch   5  loss 1.48231  val AP 0.748  F1 0.693 @ 0.25  anomalies {'gradient clipped': 27, 'crop outside the swath (re-drawn)': 16}
+epoch   6  loss 1.53303  val AP 0.749  F1 0.696 @ 0.22  anomalies {'crop outside the swath (re-drawn)': 21, 'gradient clipped': 27}
+epoch   7  loss 1.59416  val AP 0.749  F1 0.696 @ 0.24  anomalies {'gradient clipped': 34, 'crop outside the swath (re-drawn)': 17}
+epoch   8  loss 1.56299  val AP 0.751  F1 0.699 @ 0.22  anomalies {'crop outside the swath (re-drawn)': 30, 'gradient clipped': 29}
+epoch   9  loss 1.44476  val AP 0.750  F1 0.702 @ 0.23  anomalies {'gradient clipped': 27, 'crop outside the swath (re-drawn)': 16}
+epoch  10  loss 1.48289  val AP 0.749  F1 0.698 @ 0.21  anomalies {'gradient clipped': 34, 'crop outside the swath (re-drawn)': 21}
+epoch  11  loss 1.48397  val AP 0.755  F1 0.704 @ 0.21  anomalies {'gradient clipped': 21, 'crop outside the swath (re-drawn)': 18}
+epoch  12  loss 1.49754  val AP 0.751  F1 0.700 @ 0.22  anomalies {'gradient clipped': 32, 'crop outside the swath (re-drawn)': 13}
+epoch  13  loss 1.45843  val AP 0.750  F1 0.699 @ 0.21  anomalies {'crop outside the swath (re-drawn)': 25, 'gradient clipped': 21}
+epoch  14  loss 1.4753  val AP 0.750  F1 0.700 @ 0.23  anomalies {'gradient clipped': 28, 'crop outside the swath (re-drawn)': 19}

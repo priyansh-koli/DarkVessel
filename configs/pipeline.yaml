@@ -9,3 +9,11 @@ output_path: outputs/detections.gpkg
 geometry:
   heading_deg: 350.0
   incidence_deg: 35.0
+
+# Detector: `stub` is the synthetic fixture's stand-in. For real Sentinel-1 scenes use `cnn`
+# (trained on LS-SSDD, see models/README.md) or `cfar` (the classical baseline). Each reads
+# `detector_threshold` in its own units; leave it out to use the calibrated default.
+# detector: cnn
+# detector_weights: models/ship_centrenet.pt
+# tile_px: 512      # the CNN is fully convolutional: 512 px tiles run ~2x faster than 128
+# overlap_px: 64

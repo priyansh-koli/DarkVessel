@@ -178,6 +178,7 @@ class Viewer:
                     "position_basis": _plain(row["position_basis"]),
                     "position_age_s": _plain(row["position_age_s"]),
                     "azimuth_shift_m": float(np.hypot(east, north)),
+                    **_course_and_speed(row["velocity_east_ms"], row["velocity_north_ms"]),
                     "matched_index": matched_by_mmsi.get(str(row["mmsi"])),
                     "raw": {"x": raw.x, "y": raw.y, **_to_pixel(scene, raw.x, raw.y)},
                     "drawn": {"x": drawn.x, "y": drawn.y, **_to_pixel(scene, drawn.x, drawn.y)},
@@ -257,6 +258,22 @@ def _detections(detections: gpd.GeoDataFrame, crops: list[str]) -> list[dict[str
         record["crop"] = crops[position] if position < len(crops) else None
         rows.append(record)
     return rows
+
+
+_MS_TO_KNOTS = 3600 / 1852
+
+
+def _course_and_speed(east_ms: float, north_ms: float) -> dict[str, float | None]:
+    """Course over ground (degrees clockwise from grid north) and speed in knots.
+
+    Absent — not zero — where the track has no velocity: a lone report says nothing about
+    heading, and drawing it as stationary would claim more than the data does.
+    """
+    if not (np.isfinite(east_ms) and np.isfinite(north_ms)):
+        return {"course_deg": None, "speed_kn": None}
+    speed = float(np.hypot(east_ms, north_ms))
+    course = float(np.degrees(np.arctan2(east_ms, north_ms)) % 360) if speed > 0 else None
+    return {"course_deg": course, "speed_kn": speed * _MS_TO_KNOTS}
 
 
 def _latitude_of(scene: Scene) -> float:

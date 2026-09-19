@@ -19,9 +19,11 @@ class RunConfig:
     max_gap: timedelta
     tile_px: int
     overlap_px: int
-    detector_threshold: float
+    detector_threshold: float | None
     output_path: Path
     geometry: Geometry | None
+    detector: str = "stub"
+    detector_weights: Path | None = None
 
 
 def load(path: str | Path) -> RunConfig:
@@ -46,7 +48,15 @@ def load(path: str | Path) -> RunConfig:
         max_gap=timedelta(minutes=float(raw.get("max_gap_minutes", 10))),
         tile_px=int(raw.get("tile_px", 128)),
         overlap_px=int(raw.get("overlap_px", 32)),
-        detector_threshold=float(raw.get("detector_threshold", 0.5)),
+        # Each detector reads its threshold in its own units (brightness, clutter standard
+        # deviations, heatmap score); left out, cfar and cnn use their calibrated defaults.
+        detector_threshold=(
+            float(raw["detector_threshold"])
+            if raw.get("detector_threshold") is not None
+            else (0.5 if raw.get("detector", "stub") == "stub" else None)
+        ),
         output_path=Path(raw.get("output_path", "outputs/detections.gpkg")),
         geometry=geometry,
+        detector=str(raw.get("detector", "stub")),
+        detector_weights=Path(raw["detector_weights"]) if raw.get("detector_weights") else None,
     )

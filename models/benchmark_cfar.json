@@ -1,0 +1,49 @@
+{
+  "detector": "cfar",
+  "threshold": 6.0011,
+  "validation": {
+    "threshold": 6.0011,
+    "precision": 0.6318,
+    "recall": 0.529,
+    "f1": 0.5758,
+    "true_positives": 374,
+    "false_positives": 218,
+    "false_negatives": 333,
+    "ap": 0.4459
+  },
+  "test": {
+    "threshold": 6.0011,
+    "precision": 0.4883,
+    "recall": 0.6231,
+    "f1": 0.5475,
+    "true_positives": 1481,
+    "false_positives": 1552,
+    "false_negatives": 896,
+    "ap": 0.5627
+  },
+  "test_inshore": {
+    "threshold": 6.0011,
+    "precision": 0.2645,
+    "recall": 0.2945,
+    "f1": 0.2787,
+    "true_positives": 260,
+    "false_positives": 723,
+    "false_negatives": 623,
+    "ap": 0.1757
+  },
+  "test_offshore": {
+    "threshold": 6.0011,
+    "precision": 0.5956,
+    "recall": 0.8173,
+    "f1": 0.6891,
+    "true_positives": 1221,
+    "false_positives": 829,
+    "false_negatives": 273,
+    "ap": 0.7901
+  },
+  "ms_per_800px_image": 111.3,
+  "data_audit": {
+    "image mostly outside the swath (kept, no-data masked)": 113,
+    "same ship boxed twice, IoU > 0.7 (merged)": 1
+  }
+}

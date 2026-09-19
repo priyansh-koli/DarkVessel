@@ -23,7 +23,9 @@ The finished project answers three questions:
 - [x] **Interactive viewer** — live and static, showing why each detection got its status.
 - [ ] **Real data run** — at least one real Sentinel-1 scene fused with real DMA AIS,
       producing a sensible result.
-- [ ] **Trained detector** — a CNN trained on LS-SSDD, satisfying the `Detector` protocol,
+- [~] **Trained detector** — done 2026-09-18 (`models/README.md`): beats CFAR offshore
+      (F1 0.87 vs 0.69) and on overall AP (0.63 vs 0.56), loses inshore (F1 0.19 vs 0.28)
+      until land is masked. Original goal: a CNN trained on LS-SSDD, satisfying the `Detector` protocol,
       with reported precision/recall and compared against a simple CFAR baseline.
 - [ ] **Tier 2 contextual layers** — distance to shore, depth, fishing effort, EEZ from
       Earth Engine, joined to every detection.

@@ -145,6 +145,36 @@ A third, smaller bug was found while building: the bright-pixel stand-in reporte
 detection per pixel across a flat plateau of equal values. Fixed with connected-component
 collapsing.
 
+## The detector
+
+The pipeline takes its detector as a parameter, and ships three:
+
+- **`stub`** is a deterministic stand-in for the synthetic fixture, used by the quick start.
+- **`cfar`** is two-parameter CA-CFAR, the classical radar ship detector and the baseline.
+- **`cnn`** is a small centre-heatmap U-Net trained on LS-SSDD-v1.0, 6,015 labelled ships in
+  15 Sentinel-1 IW scenes.
+
+Both real detectors were benchmarked the same way: threshold chosen on held-out training
+scenes, then reported on the official test scenes.
+
+| LS-SSDD test | CFAR F1 / AP | CNN F1 / AP |
+|---|---|---|
+| Offshore | 0.689 / 0.790 | **0.866 / 0.951** |
+| Inshore | **0.279 / 0.176** | 0.193 / 0.117 |
+| All | 0.547 / 0.563 | 0.541 / **0.626** |
+
+At sea, where a dark vessel is searched for, the CNN finds 91% of ships with less than half
+of CFAR's false alarms. Inshore, both are poor and the CNN is worse: urban land clutter reads
+as hulls. The remedy there is a land mask, not more training. [`models/README.md`](models/README.md)
+has the model card: data audit, protocol, the training anomalies found and how each was
+diagnosed, and how to reproduce.
+
+```yaml
+detector: cnn                          # in a run configuration
+detector_weights: models/ship_centrenet.pt
+tile_px: 512
+```
+
 ## Repository layout
 
 ```
@@ -154,30 +184,34 @@ src/darkvessel/
   config.py     run configuration
   data/         study area, scene reading, tiling, provenance, AIS ingestion,
                 the DMA archive, synthetic fixtures
-  detect/       detector contract, deterministic stand-in, pixel->ground, whole-scene inference
+  detect/       detector contract, stand-in, CFAR, the CNN and its training, LS-SSDD reading
+                and auditing, scoring, pixel->ground, whole-scene inference
   fusion/       AIS interpolation, azimuth correction, matching, the structure register
   embed/        embedder contract, detection crops, recurrence-based structure finding
   context/      contextual variable schema
   render.py     SAR pixels -> PNG, for the viewer and the static build
   web/          the viewer: payload builder, FastAPI app, frontend
 configs/        run configuration
+models/         the trained detector, its model card, benchmarks and training logs
 tests/          unit tests for every geometry-critical path
 Dockerfile      the live app, for any container platform
 ```
 
 The detector arrives as a *parameter*, never an import. That is what lets the whole chain run
 and be tested with a deterministic stand-in; a trained CNN satisfying the same `Detector`
-protocol is a drop-in replacement and nothing else changes.
+protocol is a drop-in replacement and nothing else changes — which is how the trained one
+went in.
 
 ## Status
 
-**Built and tested (163 tests passing):** the full Tier-1 core — tiling and dedup,
+**Built and tested (185 tests passing):** the full Tier-1 core — tiling and dedup,
 pixel→ground, AIS interpolation, azimuth correction, optimal matching, structure register,
 recurrence clustering, the pipeline seam, the CLI, and raw-archive AIS ingestion with every
-cleaning rule counted and auditable — plus the viewer, in both its live and static forms.
+cleaning rule counted and auditable — plus the viewer, in both its live and static forms, and a
+CNN ship detector trained on LS-SSDD and benchmarked against CFAR.
 
 **Not yet built:** Earth Engine export and contextual sampling (distance to shore, depth,
-fishing effort, EEZ join); detector training on LS-SSDD and contrastive embeddings; the
+fishing effort, EEZ join); a land mask for inshore scenes; contrastive embeddings; the
 archive-wide concentration analysis and the static map.
 
 Where results are modest they should be reported as modest. A detector that usefully *ranks*

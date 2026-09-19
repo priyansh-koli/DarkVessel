@@ -287,3 +287,13 @@ def test_a_baked_run_is_exactly_the_live_run(baked, values):
 def test_the_bake_reproduces_the_azimuth_story(baked):
     assert _baked_run(baked)["counts"]["dark"] == 1
     assert _baked_run(baked, apply_azimuth=False)["counts"]["dark"] == 2
+
+
+def test_declarations_carry_course_and_speed_for_the_radar_view(payload):
+    """A lone report has no velocity, so it has no course — absent, not zero."""
+    by_mmsi = {d["mmsi"]: d for d in payload["declarations"]}
+    fast = by_mmsi["219000003"]
+    assert fast["course_deg"] == pytest.approx(90.0, abs=0.5)
+    assert fast["speed_kn"] > 10
+    assert by_mmsi["219000001"]["course_deg"] is None
+    assert by_mmsi["219000001"]["speed_kn"] is None

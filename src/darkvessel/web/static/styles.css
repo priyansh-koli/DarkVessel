@@ -356,27 +356,123 @@ input[type="range"]:disabled { opacity: .45; cursor: not-allowed; }
 }
 .scalebar em { font-style: normal; }
 
-/* overlay marks */
-.mark { cursor: pointer; }
-/* The boxes are unfilled, so by default only their 2 px outline is hit-testable and a click in
-   the middle of a marker falls through to the stage. The halo is the marker's whole hit area. */
-.mark-halo { pointer-events: all; }
-.mark-box { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
-.mark-matched   .mark-box { stroke: var(--matched); }
-.mark-dark      .mark-box { stroke: var(--dark); }
-.mark-structure .mark-box { stroke: var(--structure); }
-.mark-unsearched .mark-box { stroke: var(--unsearched); }
-.mark-halo { fill: none; stroke: #fff; stroke-width: 1; opacity: 0; vector-effect: non-scaling-stroke; }
-.mark:hover .mark-halo, .mark.is-selected .mark-halo { opacity: .9; }
+/* overlay marks — each body is drawn in CSS pixels and scaled into scene units (app.js) */
+.mark { cursor: pointer; --c: var(--unsearched); }
+.mark-matched   { --c: var(--matched); }
+.mark-dark      { --c: var(--dark); }
+.mark-structure { --c: var(--structure); }
+.mark-unsearched{ --c: var(--unsearched); }
+/* The halo is invisible but hit-testable: the glyphs are small, and a click anywhere in the
+   marker's box should select it. */
+.mark-halo { fill: none; stroke: none; pointer-events: all; }
+.mark-brackets {
+  fill: none; stroke: #fff; stroke-width: 1.5; opacity: 0;
+  vector-effect: non-scaling-stroke; transition: opacity .12s ease;
+}
+.mark:hover .mark-brackets { opacity: .55; }
+.mark.is-selected .mark-brackets { opacity: 1; stroke: var(--accent); }
 .mark.is-dimmed { opacity: .22; }
-/* No font-size here: it is set per-zoom as a presentation attribute, and any CSS rule would
-   outrank it and freeze the labels at one size. */
+.glyph-shape {
+  fill: color-mix(in srgb, var(--c) 30%, transparent); stroke: var(--c); stroke-width: 1.6;
+  vector-effect: non-scaling-stroke; stroke-linejoin: round;
+}
+.glyph-detail { fill: none; stroke: var(--c); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.glyph-pulse {
+  fill: none; stroke: var(--dark); stroke-width: 1.5; vector-effect: non-scaling-stroke;
+  transform-box: fill-box; transform-origin: center;
+  animation: pulse-ring 1.8s ease-out infinite;
+}
+@keyframes pulse-ring { 0% { transform: scale(.6); opacity: .9; } 100% { transform: scale(2.2); opacity: 0; } }
 .mark-label {
   font-family: var(--mono); fill: var(--text);
   paint-order: stroke; stroke: #05070b; stroke-width: 3px; stroke-linejoin: round;
 }
 .mark:focus-visible { outline: none; }
-.mark:focus-visible .mark-halo { opacity: 1; stroke-width: 2; }
+.mark:focus-visible .mark-brackets { opacity: 1; stroke: var(--accent); }
+.vector-line {
+  stroke: var(--matched); stroke-width: 1.5; vector-effect: non-scaling-stroke; opacity: .8;
+}
+.vector-head { fill: var(--matched); }
+.stage.is-compact .mark-speed { display: none; }
+
+/* ───────────────────── radar display ───────────────────── */
+
+:root { --phosphor: #5dff9f; }
+
+.viewer-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.segmented {
+  display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  overflow: hidden; background: var(--panel);
+}
+.segmented button {
+  border: 0; background: none; color: var(--muted); font: inherit; font-size: 11.5px;
+  padding: 5px 11px; cursor: pointer;
+}
+.segmented button + button { border-left: 1px solid var(--line); }
+.segmented button[aria-pressed="true"] { background: var(--panel-2); color: var(--text); }
+
+.radar-only { display: none; }
+.stage.is-radar .radar-only { display: block; }
+.viewer-head:has(+ .stage.is-radar) .radar-only { display: grid; }
+
+.stage.is-radar { background: radial-gradient(circle at center, #04150c 0%, #020805 70%); }
+
+[data-layer="grid"] { display: none; }
+.stage.is-radar [data-layer="grid"] { display: inline; }
+.radar-ring {
+  fill: none; stroke: var(--phosphor); stroke-opacity: .22; stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.radar-axis, .radar-tick {
+  stroke: var(--phosphor); stroke-opacity: .14; stroke-width: 1; vector-effect: non-scaling-stroke;
+}
+.radar-tick.is-major { stroke-opacity: .45; }
+.radar-centre { fill: var(--phosphor); fill-opacity: .6; }
+.radar-label {
+  font-family: var(--mono); font-size: 9.5px; fill: var(--phosphor); fill-opacity: .7;
+  text-anchor: middle; dominant-baseline: middle;
+  paint-order: stroke; stroke: #020805; stroke-width: 3px;
+}
+.radar-bearing { fill-opacity: .85; }
+
+/* The sweep lives inside the transformed stage, so it pans and zooms with the scene. */
+.sweep-clip { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.sweep {
+  position: absolute; left: 50%; top: 50%; width: 150%; aspect-ratio: 1; translate: -50% -50%;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg,
+    rgba(93,255,159,0) 0deg, rgba(93,255,159,0) 290deg,
+    rgba(93,255,159,.05) 320deg, rgba(93,255,159,.22) 357deg, rgba(160,255,200,.55) 360deg);
+  mix-blend-mode: screen;
+  animation: sweep 6s linear infinite;
+}
+@keyframes sweep { to { rotate: 1turn; } }
+
+/* Afterglow: a blip flares as the sweep crosses its bearing, then fades like phosphor. */
+.stage.is-radar .mark .glyph { animation: afterglow 6s linear infinite; animation-delay: var(--sweep-delay, 0s); }
+@keyframes afterglow {
+  0%   { opacity: 1; filter: drop-shadow(0 0 4px var(--c)); }
+  60%  { opacity: .55; filter: none; }
+  100% { opacity: .45; filter: none; }
+}
+.stage.is-sweep-paused .sweep,
+.stage.is-sweep-paused .mark .glyph,
+.stage.is-sweep-paused .glyph-pulse { animation-play-state: paused; }
+.stage.is-sweep-paused .sweep { opacity: 0; }
+.stage.is-sweep-paused .mark .glyph { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sweep, .glyph-pulse, .stage.is-radar .mark .glyph { animation: none !important; }
+  .sweep { opacity: 0; }
+}
+
+/* legend glyphs */
+.key-glyph { width: 13px; height: 13px; flex: none; overflow: visible; }
+.key-glyph .g-matched   { fill: rgba(63,185,80,.3);  stroke: var(--matched); stroke-width: 1.6; }
+.key-glyph .g-dark      { fill: rgba(255,107,94,.3); stroke: var(--dark); stroke-width: 1.6; }
+.key-glyph .g-structure { fill: rgba(185,140,255,.3);stroke: var(--structure); stroke-width: 1.6; }
+.key-glyph .g-unsearched{ fill: rgba(139,152,168,.3);stroke: var(--unsearched); stroke-width: 1.6; }
+.key-vector { height: 0; width: 14px; border-top: 2px solid var(--matched); }
 
 .decl-dot { fill: var(--decl); stroke: #05070b; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .decl-raw {
@@ -651,3 +747,29 @@ kbd {
 }
 
 .doc-page .site-nav { margin-left: auto; }
+
+/* ───────────────────── share panel ───────────────────── */
+
+.share { position: relative; }
+.share-pop {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 30;
+  width: min(380px, calc(100vw - 32px));
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 14px;
+}
+.share-pop label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 8px; }
+.share-row { display: flex; gap: 6px; }
+.share-row input {
+  flex: 1; min-width: 0; font-family: var(--mono); font-size: 11.5px; color: var(--text);
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 7px 9px;
+}
+.share-row input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn.share-copy { width: auto; padding: 7px 14px; }
+.share-status { margin: 8px 0 0; font-size: 11.5px; color: var(--muted); min-height: 1em; }
+.share-status.is-ok { color: var(--matched); }
+.share-includes {
+  margin: 10px 0 0; padding: 10px 0 0 16px; border-top: 1px solid var(--line-soft);
+  font-size: 11.5px; color: var(--muted);
+}
+.share-pop #share-native { margin-top: 10px; }

@@ -1,0 +1,8 @@
+loaded 4800 train and 1200 validation sub-images
+  audit 6000 images, 3637 boxes read
+  audit   image mostly outside the swath (kept, no-data masked): 220  (e.g. 02_10_1, 02_10_30, 02_11_1, 02_11_30, 02_12_1)
+epoch   1  loss 3.65525  val AP 0.107  F1 0.172 @ 0.18  anomalies {'gradient clipped': 114, 'crop outside the swath (re-drawn)': 23}
+epoch   2  loss 2.56146  val AP 0.113  F1 0.181 @ 0.11  anomalies {'gradient clipped': 84, 'crop outside the swath (re-drawn)': 29}
+epoch   3  loss 2.39793  val AP 0.570  F1 0.578 @ 0.19  anomalies {'gradient clipped': 76, 'crop outside the swath (re-drawn)': 26}
+epoch   4  loss 2.17408  val AP 0.561  F1 0.571 @ 0.18  anomalies {'gradient clipped': 74, 'crop outside the swath (re-drawn)': 28}
+epoch   5  loss 1.94586  val AP 0.385  F1 0.472 @ 0.18  anomalies {'gradient clipped': 64, 'crop outside the swath (re-drawn)': 33}

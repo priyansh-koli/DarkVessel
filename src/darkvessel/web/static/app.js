@@ -50,6 +50,9 @@
     pan: { x: 0, y: 0 },
     base: { left: 0, top: 0, w: 0, h: 0 },
     pending: null,       // AbortController
+    display: "radar",    // radar | sar
+    grey: null,          // the scene's greyscale pixels, re-tinted per display
+    sweepStart: performance.now(),
   };
 
   const els = {
@@ -167,6 +170,7 @@
     bindControls();
     bindStage();
     bindDelegatedClicks();
+    bindDisplay();
     setStageState("Loading scene…");
 
     // The content-type check matters: a static host with an SPA fallback answers every
@@ -259,6 +263,7 @@
       setMode();
       render();
       writeUrlState();
+      closeShare();
     } catch (error) {
       if (error.name === "AbortError") return;
       state.failed = true;
@@ -469,9 +474,12 @@
     canvas.height = scene.height;
     const image = new Image();
     image.onload = () => {
-      canvas.getContext("2d").drawImage(image, 0, 0);
+      const context = canvas.getContext("2d");
+      context.drawImage(image, 0, 0);
+      state.grey = context.getImageData(0, 0, canvas.width, canvas.height);
       canvas.dataset.loaded = scene.id;
       delete canvas.dataset.loading;
+      paintScene();
       layoutStage();
     };
     image.onerror = () => {
@@ -480,6 +488,27 @@
     };
     image.src = canvas.dataset.src;
     layoutStage();
+  }
+
+  /** SAR mode shows the pixels as they are; radar mode maps them onto a phosphor ramp. */
+  function paintScene() {
+    if (!state.grey) return;
+    const context = els.canvas.getContext("2d");
+    if (state.display === "sar") {
+      context.putImageData(state.grey, 0, 0);
+      return;
+    }
+    const src = state.grey.data;
+    const out = context.createImageData(state.grey.width, state.grey.height);
+    for (let i = 0; i < src.length; i += 4) {
+      // A gentle gamma lift so weak returns still read, as on a phosphor screen.
+      const v = 255 * Math.pow(src[i] / 255, 0.8);
+      out.data[i] = 0.22 * v + 2;
+      out.data[i + 1] = v * 0.95 + 10;
+      out.data[i + 2] = 0.55 * v + 6;
+      out.data[i + 3] = 255;
+    }
+    context.putImageData(out, 0, 0);
   }
 
   function renderCounts(counts) {
@@ -536,13 +565,21 @@
 
   function renderOverlay(data) {
     const svg = els.overlay;
-    svg.setAttribute("viewBox", `0 0 ${data.scene.width} ${data.scene.height}`);
+    const { scene } = data;
+    svg.setAttribute("viewBox", `0 0 ${scene.width} ${scene.height}`);
     svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     svg.textContent = "";
 
+    const defs = el("defs");
+    defs.append(el("clipPath", { id: "scene-clip" }));
+    defs.firstChild.append(el("rect", { x: 0, y: 0, width: scene.width, height: scene.height }));
+    svg.append(defs);
+    const grid = group(svg, "grid");
+    grid.setAttribute("clip-path", "url(#scene-clip)");
     const lines = group(svg, "lines");
     const decls = group(svg, "decls");
     const marks = group(svg, "marks");
+    renderRadarGrid(grid, scene);
 
     for (const position of data.register) {
       lines.append(
@@ -550,12 +587,13 @@
           class: "reg-ring",
           cx: position.px,
           cy: position.py,
-          r: data.config.register_tolerance_m / data.scene.pixel_size_m,
+          r: data.config.register_tolerance_m / scene.pixel_size_m,
         }),
         el("path", { class: "reg-mark", d: crossPath(position.px, position.py, 5) })
       );
     }
 
+    const byTarget = new Map();
     for (const declaration of data.declarations) {
       if (declaration.azimuth_shift_m > 0.5) {
         lines.append(
@@ -573,6 +611,7 @@
       if (declaration.matched_index !== null && declaration.matched_index !== undefined) {
         const target = data.detections[declaration.matched_index];
         if (target) {
+          byTarget.set(target.index, declaration);
           lines.append(
             el("line", {
               class: "match-line",
@@ -580,6 +619,25 @@
               x2: target.px, y2: target.py,
             })
           );
+          // A speed vector from the target, as a radar plotting aid would draw it. Twenty
+          // seconds rather than the usual six minutes: this scene is barely a kilometre across.
+          if (declaration.course_deg !== null && declaration.speed_kn > 0.5) {
+            const metres = (declaration.speed_kn * 1852 * VECTOR_SECONDS) / 3600;
+            const length = metres / scene.pixel_size_m;
+            const rad = (declaration.course_deg * Math.PI) / 180;
+            const tipX = target.px + Math.sin(rad) * length;
+            const tipY = target.py - Math.cos(rad) * length;
+            lines.append(
+              el("line", { class: "vector-line", x1: target.px, y1: target.py, x2: tipX, y2: tipY }),
+              // Pinned in screen pixels like the markers, so the head does not grow on zoom.
+              el("path", {
+                class: "vector-head pinned",
+                d: "M0 -5 L4 3 L-4 3 Z",
+                "data-anchor": `${tipX},${tipY}`,
+                "data-rotate": declaration.course_deg.toFixed(1),
+              })
+            );
+          }
         }
       }
 
@@ -594,6 +652,7 @@
     }
 
     for (const detection of data.detections) {
+      const declaration = byTarget.get(detection.index);
       const dimmed = state.filter && detection.status !== state.filter ? " is-dimmed" : "";
       const selected = detection.index === state.selected ? " is-selected" : "";
       const mark = el("g", {
@@ -603,16 +662,192 @@
         "aria-label": `Detection ${detection.index + 1}, ${statusText(detection.status)}`,
       });
       mark.dataset.index = String(detection.index);
-      mark.append(
-        el("rect", { class: "mark-halo", x: 0, y: 0, width: 1, height: 1 }),
-        el("rect", { class: "mark-box", x: 0, y: 0, width: 1, height: 1 }),
-        el("text", { class: "mark-label", x: 0, y: 0 }, String(detection.index + 1)),
-        title(`#${detection.index + 1} · ${statusText(detection.status)}`)
+
+      // Everything inside `.mark-body` is drawn in CSS pixels around (0, 0); restyleMarks
+      // places and scales the group, so a marker keeps its on-screen size at every zoom.
+      const body = el("g", { class: "mark-body" });
+      body.append(
+        el("rect", { class: "mark-halo", x: -17, y: -17, width: 34, height: 34 }),
+        el("path", { class: "mark-brackets", d: bracketPath(16, 6) }),
+        glyph(detection, declaration),
+        markLabel(detection, declaration),
+        title(markTitle(detection, declaration))
       );
+      mark.append(body);
+      mark.style.setProperty("--sweep-delay", `${sweepDelay(detection, scene)}s`);
       marks.append(mark);
     }
 
     restyleMarks();
+  }
+
+  /** A status-specific glyph: a hull along its course for a vessel AIS explains, a diamond
+      for a dark contact, a boxed cross for a structure, a plain blip where nothing is known. */
+  function glyph(detection, declaration) {
+    const g = el("g", { class: "glyph" });
+    if (detection.status === "matched" && declaration && declaration.course_deg !== null) {
+      g.setAttribute("transform", `rotate(${declaration.course_deg.toFixed(1)})`);
+      g.append(el("path", { class: "glyph-shape", d: "M0 -12 L6 -3 L6 9 L-6 9 L-6 -3 Z" }));
+    } else if (detection.status === "matched") {
+      g.append(el("circle", { class: "glyph-shape", r: 6.5 }));
+    } else if (detection.status === "dark") {
+      g.append(
+        el("circle", { class: "glyph-pulse", r: 7 }),
+        el("path", { class: "glyph-shape", d: "M0 -8 L8 0 L0 8 L-8 0 Z" })
+      );
+    } else if (detection.status === "structure") {
+      g.append(
+        el("rect", { class: "glyph-shape", x: -6, y: -6, width: 12, height: 12 }),
+        el("path", { class: "glyph-detail", d: "M-6 -6 L6 6 M6 -6 L-6 6" })
+      );
+    } else {
+      g.append(el("circle", { class: "glyph-shape", r: 5 }));
+    }
+    return g;
+  }
+
+  /** The number, and the speed where known. On a narrow stage neighbouring labels would
+      collide, so the speed is hidden there (it stays in the tooltip and the inspector). */
+  function markLabel(detection, declaration) {
+    const label = el("text", { class: "mark-label", x: 18, y: -10, "font-size": 10.5 });
+    label.append(document.createTextNode(String(detection.index + 1)));
+    if (declaration && declaration.speed_kn > 0.5) {
+      const speed = el("tspan", { class: "mark-speed" });
+      speed.textContent = ` · ${declaration.speed_kn.toFixed(1)} kn`;
+      label.append(speed);
+    }
+    return label;
+  }
+
+  function markTitle(detection, declaration) {
+    const parts = [`#${detection.index + 1} · ${statusText(detection.status)}`];
+    if (declaration) {
+      parts.push(`MMSI ${declaration.mmsi}`);
+      if (declaration.length_m) parts.push(`${Math.round(declaration.length_m)} m long`);
+      if (declaration.course_deg !== null) {
+        parts.push(`course ${Math.round(declaration.course_deg)}° at ${declaration.speed_kn.toFixed(1)} kn`);
+      }
+    }
+    return parts.join(" · ");
+  }
+
+  function bracketPath(r, arm) {
+    const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+    return corners
+      .map(([sx, sy]) => `M${sx * r} ${sy * (r - arm)} V${sy * r} H${sx * (r - arm)}`)
+      .join(" ");
+  }
+
+  /* ───────────────────────── radar display ───────────────────────── */
+
+  const SWEEP_SECONDS = 6;
+  const VECTOR_SECONDS = 20;
+
+  /** Range rings around the scene centre, bearing ticks, and a north mark. */
+  function renderRadarGrid(layer, scene) {
+    const cx = scene.width / 2;
+    const cy = scene.height / 2;
+    const reach = Math.hypot(cx, cy);
+    const inner = Math.min(cx, cy);
+    const ringM = niceStep((inner * scene.pixel_size_m) / 3);
+    const ringPx = ringM / scene.pixel_size_m;
+
+    for (let r = ringPx, n = 1; r <= reach; r += ringPx, n++) {
+      layer.append(el("circle", { class: "radar-ring", cx, cy, r }));
+      if (r < inner) {
+        const at = Math.SQRT1_2 * r;
+        const label = el("text", { class: "radar-label pinned", "data-anchor": `${cx + at},${cy + at}` });
+        label.textContent = formatRange(ringM * n);
+        layer.append(label);
+      }
+    }
+    for (let bearing = 0; bearing < 360; bearing += 10) {
+      const rad = (bearing * Math.PI) / 180;
+      const major = bearing % 30 === 0;
+      const r0 = inner * (major ? 0.93 : 0.965);
+      layer.append(
+        el("line", {
+          class: major ? "radar-tick is-major" : "radar-tick",
+          x1: cx + Math.sin(rad) * r0, y1: cy - Math.cos(rad) * r0,
+          x2: cx + Math.sin(rad) * inner, y2: cy - Math.cos(rad) * inner,
+        })
+      );
+      if (major) {
+        const label = el("text", {
+          class: "radar-label radar-bearing pinned",
+          "data-anchor": `${cx + Math.sin(rad) * inner * 0.86},${cy - Math.cos(rad) * inner * 0.86}`,
+        });
+        label.textContent = bearing === 0 ? "N" : String(bearing).padStart(3, "0");
+        layer.append(label);
+      }
+    }
+    layer.append(
+      el("line", { class: "radar-axis", x1: cx, y1: cy - inner, x2: cx, y2: cy + inner }),
+      el("line", { class: "radar-axis", x1: cx - inner, y1: cy, x2: cx + inner, y2: cy }),
+      el("circle", { class: "radar-centre", cx, cy, r: 1.5 })
+    );
+  }
+
+  function niceStep(target) {
+    const magnitude = 10 ** Math.floor(Math.log10(target));
+    return magnitude * ([1, 2, 2.5, 5, 10].find((m) => magnitude * m >= target) ?? 10);
+  }
+
+  const formatRange = (m) => (m >= 1000 ? `${(m / 1000).toFixed(m % 1000 ? 1 : 0)} km` : `${m} m`);
+
+  /** Grid bearing of a detection from the scene centre, clockwise from north. */
+  function bearingOf(detection, scene) {
+    const dx = detection.px - scene.width / 2;
+    const dy = detection.py - scene.height / 2;
+    return ((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360;
+  }
+
+  /** A negative animation delay that brightens the blip exactly as the sweep crosses it.
+      Both animations share the sweep's start time, so they stay in step across re-renders. */
+  function sweepDelay(detection, scene) {
+    const hitAt = (bearingOf(detection, scene) / 360) * SWEEP_SECONDS;
+    const elapsed = ((performance.now() - state.sweepStart) / 1000) % SWEEP_SECONDS;
+    return (((hitAt - elapsed) % SWEEP_SECONDS) + SWEEP_SECONDS) % SWEEP_SECONDS - SWEEP_SECONDS;
+  }
+
+  function setDisplay(display) {
+    state.display = display;
+    els.stage.classList.toggle("is-radar", display === "radar");
+    for (const button of document.querySelectorAll("[data-display]")) {
+      button.setAttribute("aria-pressed", String(button.dataset.display === display));
+    }
+    try {
+      localStorage.setItem("darkvessel.display", display);
+    } catch {
+      // Storage refused (private window, embedded preview): the choice lasts for this visit.
+    }
+    paintScene();
+  }
+
+  function setSweep(on) {
+    els.stage.classList.toggle("is-sweep-paused", !on);
+    $("sweep-toggle").setAttribute("aria-pressed", String(on));
+    $("sweep-toggle").textContent = on ? "Pause sweep" : "Resume sweep";
+  }
+
+  function bindDisplay() {
+    let saved = null;
+    try {
+      saved = localStorage.getItem("darkvessel.display");
+    } catch {
+      saved = null;
+    }
+    setDisplay(saved === "sar" ? "sar" : "radar");
+    for (const button of document.querySelectorAll("[data-display]")) {
+      button.addEventListener("click", () => setDisplay(button.dataset.display));
+    }
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setSweep(!still);
+    $("sweep-toggle").addEventListener("click", () =>
+      setSweep(els.stage.classList.contains("is-sweep-paused")));
+    // The sweep element and every blip time themselves from this instant.
+    $("sweep").style.animationDelay = "0s";
+    state.sweepStart = performance.now();
   }
 
   function declarationTitle(declaration) {
@@ -623,33 +858,28 @@
     return parts.join(" · ");
   }
 
-  /** Size marks in scene units so their on-screen size stays constant across zoom levels. */
+  /** Place marker bodies and grid labels in CSS-pixel units, so they keep their on-screen
+      size at every zoom while their positions stay in scene pixels. */
   function restyleMarks() {
     const data = state.payload;
     if (!data || !state.base.w) return;
 
     const unitsPerCssPx = data.scene.width / state.base.w / state.zoom;
-    const box = 22 * unitsPerCssPx;
-    const dot = 4 * unitsPerCssPx;
-    const rawDot = 3.5 * unitsPerCssPx;
-    const font = 10 * unitsPerCssPx;
+    const u = unitsPerCssPx.toFixed(5);
 
     for (const mark of els.overlay.querySelectorAll(".mark")) {
       const detection = data.detections[Number(mark.dataset.index)];
       if (!detection) continue;
-      for (const rect of mark.querySelectorAll("rect")) {
-        const side = rect.classList.contains("mark-halo") ? box + 5 * unitsPerCssPx : box;
-        rect.setAttribute("x", detection.px - side / 2);
-        rect.setAttribute("y", detection.py - side / 2);
-        rect.setAttribute("width", side);
-        rect.setAttribute("height", side);
-      }
-      const label = mark.querySelector("text");
-      label.setAttribute("x", detection.px + box / 2 + 3 * unitsPerCssPx);
-      label.setAttribute("y", detection.py - box / 2 + font);
-      label.setAttribute("font-size", font);
+      mark.firstChild.setAttribute("transform", `translate(${detection.px} ${detection.py}) scale(${u})`);
+    }
+    for (const node of els.overlay.querySelectorAll(".pinned")) {
+      const [x, y] = node.dataset.anchor.split(",");
+      const turn = node.dataset.rotate ? ` rotate(${node.dataset.rotate})` : "";
+      node.setAttribute("transform", `translate(${x} ${y}) scale(${u})${turn}`);
     }
 
+    const dot = 4 * unitsPerCssPx;
+    const rawDot = 3.5 * unitsPerCssPx;
     for (const circle of els.overlay.querySelectorAll(".decl-dot")) circle.setAttribute("r", dot);
     for (const circle of els.overlay.querySelectorAll(".decl-raw")) circle.setAttribute("r", rawDot);
   }
@@ -914,6 +1144,7 @@
     }
 
     state.base = { w, h, left: (rect.width - w) / 2, top: (rect.height - h) / 2 };
+    els.stage.classList.toggle("is-compact", w < 520);
     Object.assign(els.inner.style, {
       left: `${state.base.left}px`,
       top: `${state.base.top}px`,
@@ -1138,15 +1369,106 @@
 
   /* ───────────────────────── share + export ───────────────────────── */
 
-  async function copyLink() {
+  /* Share opens a panel rather than copying blindly: the clipboard API is refused in an
+     embedded browser (an editor preview, an iframe) and `window.prompt` is often suppressed
+     there too, which left the button doing nothing at all. The panel always shows the link. */
+  const share = {
+    button: $("copy-link"),
+    pop: $("share-pop"),
+    url: $("share-url"),
+    status: $("share-status"),
+    includes: $("share-includes"),
+    native: $("share-native"),
+  };
+
+  function openShare() {
     writeUrlState();
-    const link = window.location.href;
+    share.url.value = window.location.href;
+    share.includes.innerHTML = shareSummary().map((line) => `<li>${escapeHtml(line)}</li>`).join("");
+    share.status.textContent = "";
+    share.native.hidden = typeof navigator.share !== "function";
+    share.pop.hidden = false;
+    share.button.setAttribute("aria-expanded", "true");
+    share.url.focus();
+    share.url.select();
+    copyShareLink();
+  }
+
+  function closeShare({ restoreFocus = false } = {}) {
+    if (share.pop.hidden) return;
+    share.pop.hidden = true;
+    share.button.setAttribute("aria-expanded", "false");
+    if (restoreFocus) share.button.focus();
+  }
+
+  /** What the link will restore, so it is visible that it carries the view, not just the page. */
+  function shareSummary() {
+    const r = request();
+    const d = state.defaults;
+    const lines = [];
+    if (r.tolerance_m !== d.tolerance_m) lines.push(`Match tolerance ${r.tolerance_m} m`);
+    if (r.max_gap_minutes !== d.max_gap_minutes) lines.push(`Max AIS gap ${r.max_gap_minutes} min`);
+    if (r.detector_threshold !== d.detector_threshold) {
+      lines.push(`Brightness threshold ${Number(r.detector_threshold).toFixed(2)}`);
+    }
+    if (r.apply_azimuth !== d.apply_azimuth) {
+      lines.push(`Azimuth correction ${r.apply_azimuth ? "on" : "off"}`);
+    }
+    if (state.register.length) {
+      lines.push(`${state.register.length} registered position${state.register.length === 1 ? "" : "s"}`);
+    }
+    if (r.register_tolerance_m !== d.register_tolerance_m && state.register.length) {
+      lines.push(`Same-position tolerance ${r.register_tolerance_m} m`);
+    }
+    if (state.selected !== null) lines.push(`Detection ${state.selected + 1} selected`);
+    return lines.length ? lines : ["Default settings — change a control to share a specific view"];
+  }
+
+  async function copyShareLink() {
+    const link = share.url.value;
+    let copied = false;
     try {
       await navigator.clipboard.writeText(link);
-      toast("Link copied — it reopens this exact view.");
+      copied = true;
     } catch {
-      window.prompt("Copy this link:", link);
+      share.url.focus();
+      share.url.select();
+      try {
+        copied = document.execCommand("copy");
+      } catch {
+        copied = false;
+      }
     }
+    if (copied) {
+      share.status.textContent = "Copied to the clipboard.";
+      share.status.className = "share-status is-ok";
+    } else {
+      share.url.select();
+      share.status.textContent = `This browser blocked copying — the link is selected, press ${
+        /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘C" : "Ctrl+C"}.`;
+      share.status.className = "share-status";
+    }
+  }
+
+  function bindShare() {
+    share.button.addEventListener("click", () => (share.pop.hidden ? openShare() : closeShare()));
+    $("share-copy").addEventListener("click", copyShareLink);
+    share.native.addEventListener("click", async () => {
+      try {
+        await navigator.share({ title: document.title, url: share.url.value });
+      } catch {
+        // Dismissed by the person, or refused by the browser; the link is still in the field.
+      }
+    });
+    share.pop.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        closeShare({ restoreFocus: true });
+      }
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!event.target.closest(".share")) closeShare();
+    });
   }
 
   const CSV_COLUMNS = [
@@ -1254,7 +1576,7 @@
       refresh();
     });
 
-    $("copy-link").addEventListener("click", copyLink);
+    bindShare();
     $("export-csv").addEventListener("click", exportCsv);
     $("export-json").addEventListener("click", exportJson);
   }

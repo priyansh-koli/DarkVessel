@@ -38,7 +38,8 @@ def create_app(config_path: str | Path) -> FastAPI:
     defaults = {
         "tolerance_m": cfg.tolerance_m,
         "max_gap_minutes": cfg.max_gap.total_seconds() / 60,
-        "detector_threshold": cfg.detector_threshold,
+        # The viewer runs the stand-in detector, whose threshold is a brightness.
+        "detector_threshold": cfg.detector_threshold if cfg.detector == "stub" else 0.5,
         "apply_azimuth": cfg.geometry is not None,
         "register_tolerance_m": SAME_POSITION_M,
     }
@@ -61,7 +62,7 @@ def create_app(config_path: str | Path) -> FastAPI:
     def run(
         tolerance_m: float = Query(cfg.tolerance_m, ge=1.0, le=5000.0),
         max_gap_minutes: float = Query(cfg.max_gap.total_seconds() / 60, ge=0.0, le=720.0),
-        detector_threshold: float = Query(cfg.detector_threshold, ge=0.0, le=1000.0),
+        detector_threshold: float = Query(defaults["detector_threshold"], ge=0.0, le=1000.0),
         apply_azimuth: bool = Query(cfg.geometry is not None),
         register: list[str] = Query(default=[]),
         register_tolerance_m: float = Query(defaults["register_tolerance_m"], ge=1.0, le=5000.0),

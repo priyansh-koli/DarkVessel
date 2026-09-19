@@ -1,0 +1,328 @@
+{
+  "model": "CentreNet",
+  "width": 16,
+  "norm": "batch",
+  "trained_on": "LS-SSDD-v1.0 train scenes 01,02,03,04,06,07,08,09",
+  "validated_on": "LS-SSDD-v1.0 scenes 05,10",
+  "best_epoch": 11,
+  "val_ap": 0.7548,
+  "val_best_f1": {
+    "threshold": 0.2113,
+    "precision": 0.7492,
+    "recall": 0.6634,
+    "f1": 0.7037,
+    "true_positives": 469,
+    "false_positives": 157,
+    "false_negatives": 238
+  },
+  "threshold": 0.21134400367736816,
+  "config": {
+    "epochs": 14,
+    "steps_per_epoch": 150,
+    "batch_size": 16,
+    "crop_px": 256,
+    "ship_fraction": 0.4,
+    "lr": 0.0005,
+    "weight_decay": 0.0001,
+    "grad_clip": 10.0,
+    "patience": 6,
+    "width": 16,
+    "norm": "batch",
+    "recalibration_batches": 40,
+    "ema_decay": 0.998,
+    "finetune_from": "models/ship_centrenet_stage1.pt",
+    "hard_negative_fraction": 0.3,
+    "hard_negative_floor": 0.2,
+    "seed": 1
+  },
+  "data_audit": {
+    "image mostly outside the swath (kept, no-data masked)": 220
+  },
+  "training_anomalies": {
+    "false alarms mined from training scenes": 12751,
+    "crop outside the swath (re-drawn)": 264,
+    "gradient clipped": 418
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 1.55091,
+      "val_ap": 0.7483,
+      "val_best_f1": {
+        "threshold": 0.2617,
+        "precision": 0.7727,
+        "recall": 0.6252,
+        "f1": 0.6912,
+        "true_positives": 442,
+        "false_positives": 130,
+        "false_negatives": 265
+      },
+      "lr": 0.0004937319780454559,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 20,
+        "gradient clipped": 44
+      },
+      "minutes": 1.6
+    },
+    {
+      "epoch": 2,
+      "train_loss": 1.55984,
+      "val_ap": 0.7512,
+      "val_best_f1": {
+        "threshold": 0.2423,
+        "precision": 0.7567,
+        "recall": 0.6379,
+        "f1": 0.6922,
+        "true_positives": 451,
+        "false_positives": 145,
+        "false_negatives": 256
+      },
+      "lr": 0.00047524221697560476,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 18,
+        "gradient clipped": 37
+      },
+      "minutes": 3.2
+    },
+    {
+      "epoch": 3,
+      "train_loss": 1.54447,
+      "val_ap": 0.7498,
+      "val_best_f1": {
+        "threshold": 0.2417,
+        "precision": 0.7601,
+        "recall": 0.6407,
+        "f1": 0.6953,
+        "true_positives": 453,
+        "false_positives": 143,
+        "false_negatives": 254
+      },
+      "lr": 0.0004454578706170075,
+      "anomalies": {
+        "gradient clipped": 29,
+        "crop outside the swath (re-drawn)": 14
+      },
+      "minutes": 4.8
+    },
+    {
+      "epoch": 4,
+      "train_loss": 1.56911,
+      "val_ap": 0.7508,
+      "val_best_f1": {
+        "threshold": 0.218,
+        "precision": 0.7204,
+        "recall": 0.6634,
+        "f1": 0.6907,
+        "true_positives": 469,
+        "false_positives": 182,
+        "false_negatives": 238
+      },
+      "lr": 0.0004058724504646834,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 16,
+        "gradient clipped": 28
+      },
+      "minutes": 6.4
+    },
+    {
+      "epoch": 5,
+      "train_loss": 1.48231,
+      "val_ap": 0.7479,
+      "val_best_f1": {
+        "threshold": 0.2506,
+        "precision": 0.7722,
+        "recall": 0.628,
+        "f1": 0.6927,
+        "true_positives": 444,
+        "false_positives": 131,
+        "false_negatives": 263
+      },
+      "lr": 0.00035847093477938953,
+      "anomalies": {
+        "gradient clipped": 27,
+        "crop outside the swath (re-drawn)": 16
+      },
+      "minutes": 8.0
+    },
+    {
+      "epoch": 6,
+      "train_loss": 1.53303,
+      "val_ap": 0.7491,
+      "val_best_f1": {
+        "threshold": 0.2189,
+        "precision": 0.7166,
+        "recall": 0.6761,
+        "f1": 0.6958,
+        "true_positives": 478,
+        "false_positives": 189,
+        "false_negatives": 229
+      },
+      "lr": 0.0003056302334890786,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 21,
+        "gradient clipped": 27
+      },
+      "minutes": 9.7
+    },
+    {
+      "epoch": 7,
+      "train_loss": 1.59416,
+      "val_ap": 0.7494,
+      "val_best_f1": {
+        "threshold": 0.2385,
+        "precision": 0.7508,
+        "recall": 0.6478,
+        "f1": 0.6955,
+        "true_positives": 458,
+        "false_positives": 152,
+        "false_negatives": 249
+      },
+      "lr": 0.00025,
+      "anomalies": {
+        "gradient clipped": 34,
+        "crop outside the swath (re-drawn)": 17
+      },
+      "minutes": 11.4
+    },
+    {
+      "epoch": 8,
+      "train_loss": 1.56299,
+      "val_ap": 0.7515,
+      "val_best_f1": {
+        "threshold": 0.218,
+        "precision": 0.7278,
+        "recall": 0.6733,
+        "f1": 0.6995,
+        "true_positives": 476,
+        "false_positives": 178,
+        "false_negatives": 231
+      },
+      "lr": 0.00019436976651092142,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 30,
+        "gradient clipped": 29
+      },
+      "minutes": 13.1
+    },
+    {
+      "epoch": 9,
+      "train_loss": 1.44476,
+      "val_ap": 0.7504,
+      "val_best_f1": {
+        "threshold": 0.2318,
+        "precision": 0.7725,
+        "recall": 0.6436,
+        "f1": 0.7022,
+        "true_positives": 455,
+        "false_positives": 134,
+        "false_negatives": 252
+      },
+      "lr": 0.00014152906522061048,
+      "anomalies": {
+        "gradient clipped": 27,
+        "crop outside the swath (re-drawn)": 16
+      },
+      "minutes": 14.9
+    },
+    {
+      "epoch": 10,
+      "train_loss": 1.48289,
+      "val_ap": 0.7486,
+      "val_best_f1": {
+        "threshold": 0.2088,
+        "precision": 0.7203,
+        "recall": 0.6775,
+        "f1": 0.6983,
+        "true_positives": 479,
+        "false_positives": 186,
+        "false_negatives": 228
+      },
+      "lr": 9.412754953531663e-05,
+      "anomalies": {
+        "gradient clipped": 34,
+        "crop outside the swath (re-drawn)": 21
+      },
+      "minutes": 16.6
+    },
+    {
+      "epoch": 11,
+      "train_loss": 1.48397,
+      "val_ap": 0.7548,
+      "val_best_f1": {
+        "threshold": 0.2113,
+        "precision": 0.7492,
+        "recall": 0.6634,
+        "f1": 0.7037,
+        "true_positives": 469,
+        "false_positives": 157,
+        "false_negatives": 238
+      },
+      "lr": 5.454212938299258e-05,
+      "anomalies": {
+        "gradient clipped": 21,
+        "crop outside the swath (re-drawn)": 18
+      },
+      "minutes": 18.3
+    },
+    {
+      "epoch": 12,
+      "train_loss": 1.49754,
+      "val_ap": 0.7514,
+      "val_best_f1": {
+        "threshold": 0.222,
+        "precision": 0.7537,
+        "recall": 0.6535,
+        "f1": 0.7,
+        "true_positives": 462,
+        "false_positives": 151,
+        "false_negatives": 245
+      },
+      "lr": 2.4757783024395242e-05,
+      "anomalies": {
+        "gradient clipped": 32,
+        "crop outside the swath (re-drawn)": 13
+      },
+      "minutes": 19.8
+    },
+    {
+      "epoch": 13,
+      "train_loss": 1.45843,
+      "val_ap": 0.7499,
+      "val_best_f1": {
+        "threshold": 0.2098,
+        "precision": 0.7242,
+        "recall": 0.6761,
+        "f1": 0.6993,
+        "true_positives": 478,
+        "false_positives": 182,
+        "false_negatives": 229
+      },
+      "lr": 6.268021954544096e-06,
+      "anomalies": {
+        "crop outside the swath (re-drawn)": 25,
+        "gradient clipped": 21
+      },
+      "minutes": 21.4
+    },
+    {
+      "epoch": 14,
+      "train_loss": 1.4753,
+      "val_ap": 0.7503,
+      "val_best_f1": {
+        "threshold": 0.2266,
+        "precision": 0.7664,
+        "recall": 0.645,
+        "f1": 0.7005,
+        "true_positives": 456,
+        "false_positives": 139,
+        "false_negatives": 251
+      },
+      "lr": 0.0,
+      "anomalies": {
+        "gradient clipped": 28,
+        "crop outside the swath (re-drawn)": 19
+      },
+      "minutes": 23.1
+    }
+  ]
+}

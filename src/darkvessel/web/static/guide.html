@@ -113,6 +113,13 @@
   </div>
 
   <h2 id="controls">Controls</h2>
+  <h3>Radar or SAR image</h3>
+  <p>The scene opens as a radar display: range rings from the scene centre, bearings from
+    north, and a sweep that brightens each contact as it passes. A matched vessel is drawn as a
+    hull pointing along its AIS course, with an arrow showing where it will be in 20 seconds.
+    A dark contact is a pulsing red diamond. We can't know its heading, so none is drawn.
+    <em>SAR image</em> shows the radar pixels exactly as they are. <em>Pause sweep</em>
+    stops the animation, which also stays off if your system asks for reduced motion.</p>
   <h3>Match tolerance</h3>
   <p>How far a declared position may sit from a detection and still explain it. Lower is
     stricter and reports more dark vessels.</p>
@@ -143,7 +150,7 @@
       <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>table</td><td>Move to the previous or next row</td></tr>
       <tr><td><kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd></td><td>scene</td><td>Zoom in, zoom out, fit</td></tr>
       <tr><td><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></td><td>scene</td><td>Pan when zoomed in</td></tr>
-      <tr><td><kbd>Esc</kbd></td><td>anywhere</td><td>Stop registering a position</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>anywhere</td><td>Stop registering a position, or close the share panel</td></tr>
     </tbody>
   </table>
 
@@ -175,8 +182,10 @@
     </details>
     <details>
       <summary>Can I share a specific finding?</summary>
-      <p>Yes. Select <em>Share</em> above the scene. The link restores the controls, the register
-        and the selected detection.</p>
+      <p>Yes. Select <em>Share</em> above the scene. A panel shows the link and lists what it
+        restores: the controls, the register and the selected detection. The link is copied
+        for you. If your browser blocks copying (some embedded previews do), the link is
+        already selected, so press <kbd>⌘C</kbd> or <kbd>Ctrl+C</kbd>.</p>
     </details>
   </div>
 

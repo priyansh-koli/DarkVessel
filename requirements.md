@@ -50,7 +50,7 @@ Because the floor is 3.9, code must:
 |---|---|---|
 | `web` | fastapi, uvicorn[standard], pillow | the viewer (`darkvessel serve`, `darkvessel render`) |
 | `dev` | pytest, ruff, httpx, + the `web` libs | tests and lint |
-| `detector` | torch, torchvision | the trained detector (Tier 3) — declared, not yet used |
+| `detector` | torch, pillow, gdown | training and running the CNN ship detector; downloading LS-SSDD |
 | `gee` | earthengine-api | contextual layers (Tier 2) — declared, not yet used |
 
 ### Planned
@@ -60,7 +60,6 @@ Because the floor is 3.9, code must:
 | `asf_search` or `sentinelsat`/Copernicus Data Space API client | downloading Sentinel-1 GRD scenes |
 | `pyroSAR` + ESA SNAP, or `sarsen` | SAR preprocessing: orbit file, calibration to σ⁰, terrain correction, land mask |
 | `xarray`, `rioxarray` | handling multi-scene stacks |
-| `torchmetrics` or `pycocotools` | detector evaluation (precision/recall/mAP on LS-SSDD) |
 | `matplotlib`, `cartopy` or `contextily` | the static concentration map |
 | `scikit-learn` | clustering/evaluation in the embedding and concentration analysis |
 | `geemap` (optional) | exporting and inspecting Earth Engine layers |
@@ -72,7 +71,7 @@ Because the floor is 3.9, code must:
 | Synthetic fixture | `darkvessel synthesise` | **in use** — the only data the project runs on today |
 | AIS | Danish Maritime Authority daily CSVs (`web.ais.dk/aisdata/`), read by `data/dma.py` | reader built; no real file run yet |
 | SAR scenes | Sentinel-1 IW GRD (VV/VH), from Copernicus Data Space Ecosystem, ASF, or Earth Engine `COPERNICUS/S1_GRD` | planned |
-| Detector training data | LS-SSDD-v1.0 (Large-Scale SAR Ship Detection Dataset, Sentinel-1) | planned |
+| Detector training data | LS-SSDD-v1.0 (Zhang et al., *Remote Sensing* 2020), 15 Sentinel-1 IW scenes, 9000 labelled 800×800 sub-images, 6015 ships. From the authors' release, https://github.com/TianwenZhang0825/LS-SSDD-v1.0-OPEN (Apache-2.0); the zip is the Google Drive file linked there. Unzipped to `data/lsssdd/` (git-ignored, 8.3 GB zip). | **in use**: audited, trained on, benchmarked |
 | Distance to shore / coastline | GSHHG or OSM coastline; Earth Engine | planned |
 | Bathymetry | GEBCO grid | planned |
 | Fishing effort | Global Fishing Watch (Earth Engine or API) | planned |
