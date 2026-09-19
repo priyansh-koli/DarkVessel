@@ -118,8 +118,16 @@
     north, and a sweep that brightens each contact as it passes. A matched vessel is drawn as a
     hull pointing along its AIS course, with an arrow showing where it will be in 20 seconds.
     A dark contact is a pulsing red diamond. We can't know its heading, so none is drawn.
-    <em>SAR image</em> shows the radar pixels exactly as they are. <em>Pause sweep</em>
-    stops the animation, which also stays off if your system asks for reduced motion.</p>
+    <em>SAR image</em> shows the radar pixels exactly as they are.</p>
+  <p>Contacts move. The scene is a single instant, so the display dead-reckons each contact
+    forward from it: a matched vessel at its declared course and speed, a dark contact at an
+    assumed slow drift, since nothing declares its velocity. A dotted track shows where each
+    one has come from, and the clock in the corner shows time since the pass, running three
+    times faster than real time. Classification always belongs to the moment of the pass.
+    <em>Pause</em> stops the sweep and the motion, which also stay off if your system asks
+    for reduced motion.</p>
+  <p>Every control has an <em>i</em> beside it: hover over it, or tab to it, for what the
+    control means and what it changes on the radar.</p>
   <h3>Match tolerance</h3>
   <p>How far a declared position may sit from a detection and still explain it. Lower is
     stricter and reports more dark vessels.</p>

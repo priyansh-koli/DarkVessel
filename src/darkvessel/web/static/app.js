@@ -576,13 +576,14 @@
     svg.append(defs);
     const grid = group(svg, "grid");
     grid.setAttribute("clip-path", "url(#scene-clip)");
-    const lines = group(svg, "lines");
-    const decls = group(svg, "decls");
+    const trailLayer = group(svg, "trails");
+    const lineLayer = group(svg, "lines");
+    const declLayer = group(svg, "decls");
     const marks = group(svg, "marks");
     renderRadarGrid(grid, scene);
 
     for (const position of data.register) {
-      lines.append(
+      lineLayer.append(
         el("circle", {
           class: "reg-ring",
           cx: position.px,
@@ -593,8 +594,25 @@
       );
     }
 
+    const tolerancePx = data.config.tolerance_m / scene.pixel_size_m;
     const byTarget = new Map();
     for (const declaration of data.declarations) {
+      // A declaration and the detection it explains move as one, at the declared velocity.
+      const velocity = velocityOf(declaration.course_deg, declaration.speed_kn, scene);
+      const lines = mover(lineLayer, velocity);
+      const decls = mover(declLayer, velocity);
+      trail(trailLayer, declaration.drawn.px, declaration.drawn.py, velocity,
+        declaration.matched_index === null || declaration.matched_index === undefined
+          ? "unsearched" : "matched");
+      lines.append(
+        el("circle", {
+          class: `tol-ring${declaration.matched_index === null || declaration.matched_index === undefined ? "" : " is-used"}`,
+          cx: declaration.drawn.px,
+          cy: declaration.drawn.py,
+          r: tolerancePx,
+        })
+      );
+
       if (declaration.azimuth_shift_m > 0.5) {
         lines.append(
           el("line", {
@@ -611,7 +629,7 @@
       if (declaration.matched_index !== null && declaration.matched_index !== undefined) {
         const target = data.detections[declaration.matched_index];
         if (target) {
-          byTarget.set(target.index, declaration);
+          byTarget.set(target.index, { declaration, velocity });
           lines.append(
             el("line", {
               class: "match-line",
@@ -652,7 +670,10 @@
     }
 
     for (const detection of data.detections) {
-      const declaration = byTarget.get(detection.index);
+      const pairing = byTarget.get(detection.index);
+      const declaration = pairing?.declaration;
+      const velocity = pairing ? pairing.velocity : driftOf(detection, scene);
+      if (!pairing) trail(trailLayer, detection.px, detection.py, velocity, detection.status);
       const dimmed = state.filter && detection.status !== state.filter ? " is-dimmed" : "";
       const selected = detection.index === state.selected ? " is-selected" : "";
       const mark = el("g", {
@@ -675,10 +696,12 @@
       );
       mark.append(body);
       mark.style.setProperty("--sweep-delay", `${sweepDelay(detection, scene)}s`);
+      setVelocity(mark, velocity);
       marks.append(mark);
     }
 
     restyleMarks();
+    applyMotion();
   }
 
   /** A status-specific glyph: a hull along its course for a vessel AIS explains, a diamond
@@ -742,6 +765,98 @@
 
   const SWEEP_SECONDS = 6;
   const VECTOR_SECONDS = 20;
+
+  /* ───────────────────────── motion ─────────────────────────
+     The scene is one instant. To read as a live plot, every contact is dead-reckoned forward
+     from that instant: a matched vessel at its declared course and speed, a dark or unsearched
+     contact at an assumed slow drift (nothing declares its velocity), a structure not at all.
+     Time runs MOTION_SPEEDUP times faster than real time and loops every MOTION_LOOP_SECONDS,
+     fading out and back in at the join. Classification never moves: it belongs to the pass. */
+
+  const MOTION_SPEEDUP = 3;
+  const MOTION_LOOP_SECONDS = 30;
+  const MOTION_FADE_SECONDS = 1.2;
+  const KN_TO_MS = 1852 / 3600;
+
+  const motion = { elapsed: 0, last: performance.now(), running: true, frame: 0 };
+
+  function velocityOf(courseDeg, speedKn, scene) {
+    if (isAbsent(courseDeg) || isAbsent(speedKn) || speedKn < 0.5) return null;
+    const pxPerS = (speedKn * KN_TO_MS) / scene.pixel_size_m;
+    const rad = (courseDeg * Math.PI) / 180;
+    return { vx: Math.sin(rad) * pxPerS, vy: -Math.cos(rad) * pxPerS };
+  }
+
+  /** An assumed drift for a contact nothing declares: 2 to 5 knots on a course fixed by its
+      position, so it stays the same across re-renders and control changes. */
+  function driftOf(detection, scene) {
+    if (detection.status === "structure" || detection.status === "matched") return null;
+    const seed = Math.abs(Math.sin(detection.x * 12.9898 + detection.y * 78.233) * 43758.5453) % 1;
+    return velocityOf((seed * 360 + 25) % 360, 2 + 3 * ((seed * 7) % 1), scene);
+  }
+
+  function setVelocity(node, velocity) {
+    if (!velocity) return;
+    node.dataset.vx = velocity.vx.toFixed(4);
+    node.dataset.vy = velocity.vy.toFixed(4);
+    node.classList.add("is-moving");
+  }
+
+  function mover(layer, velocity) {
+    const g = el("g", { class: "mover" });
+    setVelocity(g, velocity);
+    layer.append(g);
+    return g;
+  }
+
+  /** A dotted track from where the contact was at the pass to where it is now. */
+  function trail(layer, x, y, velocity, status) {
+    if (!velocity) return;
+    const line = el("line", { class: `trail trail-${status}`, x1: x, y1: y, x2: x, y2: y });
+    setVelocity(line, velocity);
+    layer.append(line);
+  }
+
+  function simSeconds() {
+    return (motion.elapsed % MOTION_LOOP_SECONDS) * MOTION_SPEEDUP;
+  }
+
+  function applyMotion() {
+    const t = simSeconds();
+    const intoLoop = motion.elapsed % MOTION_LOOP_SECONDS;
+    const fade = Math.min(1, intoLoop / MOTION_FADE_SECONDS, (MOTION_LOOP_SECONDS - intoLoop) / MOTION_FADE_SECONDS);
+    for (const node of els.overlay.querySelectorAll(".is-moving")) {
+      const dx = Number(node.dataset.vx) * t;
+      const dy = Number(node.dataset.vy) * t;
+      if (node.tagName === "line") {
+        node.setAttribute("x2", Number(node.getAttribute("x1")) + dx);
+        node.setAttribute("y2", Number(node.getAttribute("y1")) + dy);
+      } else {
+        node.setAttribute("transform", `translate(${dx.toFixed(2)} ${dy.toFixed(2)})`);
+      }
+      node.style.setProperty("--fade", fade.toFixed(3));
+    }
+    const clock = $("motion-clock");
+    if (clock) {
+      const whole = Math.floor(t);
+      clock.textContent = `T+${String(Math.floor(whole / 60)).padStart(2, "0")}:${String(whole % 60).padStart(2, "0")} after the pass`;
+    }
+  }
+
+  function tickMotion(now) {
+    if (motion.running) motion.elapsed += Math.min(0.1, (now - motion.last) / 1000);
+    motion.last = now;
+    applyMotion();
+    motion.frame = motion.running ? requestAnimationFrame(tickMotion) : 0;
+  }
+
+  function setMotion(on) {
+    motion.running = on;
+    if (on && !motion.frame) {
+      motion.last = performance.now();
+      motion.frame = requestAnimationFrame(tickMotion);
+    }
+  }
 
   /** Range rings around the scene centre, bearing ticks, and a north mark. */
   function renderRadarGrid(layer, scene) {
@@ -827,7 +942,8 @@
   function setSweep(on) {
     els.stage.classList.toggle("is-sweep-paused", !on);
     $("sweep-toggle").setAttribute("aria-pressed", String(on));
-    $("sweep-toggle").textContent = on ? "Pause sweep" : "Resume sweep";
+    $("sweep-toggle").textContent = on ? "Pause" : "Play";
+    setMotion(on);
   }
 
   function bindDisplay() {
@@ -1575,6 +1691,11 @@
       renderRegister();
       refresh();
     });
+
+    // An "i" inside the azimuth switch's label must open its tip, not flip the switch.
+    for (const button of document.querySelectorAll(".info")) {
+      button.addEventListener("click", (event) => event.preventDefault());
+    }
 
     bindShare();
     $("export-csv").addEventListener("click", exportCsv);

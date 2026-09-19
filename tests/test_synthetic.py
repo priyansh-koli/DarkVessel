@@ -15,6 +15,7 @@ from shapely import Point
 
 from darkvessel.data.scene import read_scene
 from darkvessel.data.synthetic import (
+    _TARGETS,
     ACQUIRED_AT,
     CRS,
     HEADING_DEG,
@@ -52,8 +53,33 @@ def test_every_target_blob_sits_at_its_declared_ground_position():
 
 
 def test_the_dark_vessel_declares_nothing_of_its_own():
-    """No AIS row belongs to the dark target: the four declared MMSIs are the other four."""
-    assert set(_ais()["mmsi"]) == {"219000001", "219000002", "219000003", "219000004"}
+    """No AIS row belongs to the dark target: at the default max gap, the declared MMSIs are
+    exactly the other four stories. The two extra vessels only report too long ago."""
+    declared = positions_at(_ais(), ACQUIRED_AT, timedelta(minutes=10))
+    assert set(declared["mmsi"]) == {"219000001", "219000002", "219000003", "219000004"}
+    assert set(_ais()["mmsi"]) == {f"21900000{i}" for i in range(1, 7)}
+
+
+def test_the_extra_targets_are_below_the_default_threshold():
+    """The faint targets exist for the viewer's threshold slider; at the default they must not
+    change the quick start's numbers."""
+    scene = _scene()
+    for name in ("faint_trawler", "faint_dark"):
+        target = _by_name(name)
+        col, row = ~scene.transform * (target.x, target.y)
+        assert 0.05 <= scene.image[int(row), int(col)] < 0.5
+
+
+def test_nothing_but_the_targets_is_detectable_at_any_threshold_the_viewer_offers():
+    scene = _scene()
+    assert np.count_nonzero(scene.image >= 0.05) == len(_TARGETS) * 4
+
+
+def test_the_stale_reports_are_declared_only_under_a_longer_max_gap():
+    at_fifteen = positions_at(_ais(), ACQUIRED_AT, timedelta(minutes=15))
+    at_thirty = positions_at(_ais(), ACQUIRED_AT, timedelta(minutes=30))
+    assert "219000005" in set(at_fifteen["mmsi"]) and "219000006" not in set(at_fifteen["mmsi"])
+    assert "219000006" in set(at_thirty["mmsi"])
 
 
 def test_the_dark_vessel_stays_dark_only_because_of_one_to_one_matching():

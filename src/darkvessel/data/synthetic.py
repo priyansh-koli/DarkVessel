@@ -3,7 +3,7 @@
 Built so every branch in the pipeline gets exercised on purpose. See the README's Quick start
 for the numbers this produces: 5 detections, 4 matched, 1 dark, 0 at a fixed structure.
 
-Five targets, five stories:
+Five targets, five stories, all bright enough to detect at the default threshold:
   - `stationary_match`     a plain match: one AIS report, close to the detection.
   - `interpolated_match`   the failure case the README calls out. Its two AIS reports bracket
                             the acquisition and interpolate exactly onto the target, but
@@ -19,6 +19,19 @@ Five targets, five stories:
 The interpolated vessel's velocity is placed along the satellite's flight direction on
 purpose, so its own azimuth-shift correction is zero — its story stays about interpolation
 alone, uncomplicated by the correction the other vessel is there to demonstrate.
+
+Every viewer control should visibly change something, so the scene holds more than the five
+stories, arranged so that none of it shows at the default settings:
+  - targets differ in brightness, so raising the detector threshold drops them one by one;
+  - `faint_trawler` and `faint_dark` sit below the default threshold, and appear only when
+    it is lowered;
+  - the trawler's only AIS report is 14 minutes old, and a sixth vessel (`219000006`) last
+    reported 25 minutes before the pass, near the dark vessel. Both sit beyond the default
+    10-minute max gap, so the defaults declare exactly the four story vessels; lengthening the
+    gap brings them in, and with a wide enough tolerance the stale report "explains" the dark
+    vessel — which is the trap a long max gap sets;
+  - the plain matches sit 140 m and 70 m from their detections, so tightening the tolerance
+    below those distances turns them dark.
 """
 
 from __future__ import annotations
@@ -39,7 +52,7 @@ from darkvessel.fusion.azimuth import Geometry
 
 CRS = "EPSG:25832"
 PIXEL_SIZE_M = 5.0
-IMAGE_SHAPE = (240, 240)  # rows, cols
+IMAGE_SHAPE = (320, 320)  # rows, cols
 ORIGIN = (499900.0, 6101100.0)  # ground (x, y) of the top-left pixel corner
 ACQUIRED_AT = datetime(2026, 8, 9, 5, 31, 24, tzinfo=timezone.utc)
 HEADING_DEG = 350.0
@@ -54,14 +67,21 @@ class _Target:
     name: str
     x: float
     y: float
+    brightness: float = 1.0
 
 
+# Positions sit on the 5 m pixel grid, so a blob's centre lands a fixed half-pixel off its
+# target. `dark_vessel` is placed 200 m from `simple_match` at a bearing of 60 degrees, and
+# `simple_match`'s declaration 70 m along the same line (see `_ais_rows`).
 _TARGETS = [
-    _Target("stationary_match", 500100.0, 6100900.0),
-    _Target("interpolated_match", 500300.0, 6100900.0),
-    _Target("azimuth_corrected_match", 500500.0, 6100900.0),
-    _Target("simple_match", 500700.0, 6100900.0),
-    _Target("dark_vessel", 500900.0, 6100900.0),
+    _Target("stationary_match", 500180.0, 6100870.0, 0.9),
+    _Target("interpolated_match", 500420.0, 6100120.0, 0.75),
+    _Target("azimuth_corrected_match", 500980.0, 6100640.0, 0.65),
+    _Target("simple_match", 500760.0, 6099800.0, 0.85),
+    _Target("dark_vessel", 500935.0, 6099900.0, 0.6),
+    # Below the default threshold of 0.5: invisible until the threshold is lowered.
+    _Target("faint_trawler", 501290.0, 6100950.0, 0.35),
+    _Target("faint_dark", 500245.0, 6099700.0, 0.4),
 ]
 
 
@@ -80,7 +100,7 @@ def _blob(image: np.ndarray, x: float, y: float, value: float = 1.0) -> None:
 def _scene() -> Scene:
     image = np.zeros(IMAGE_SHAPE, dtype=np.float32)
     for target in _TARGETS:
-        _blob(image, target.x, target.y)
+        _blob(image, target.x, target.y, target.brightness)
     return Scene(
         id="synthetic-scene-1",
         image=image,
@@ -106,7 +126,8 @@ def _ais_rows() -> list[dict]:
             mmsi="219000001",
             timestamp=ACQUIRED_AT,
             length_m=50.0,
-            geometry=Point(stationary.x + 20.0, stationary.y - 10.0),
+            # 139 m off: inside the default tolerance, outside one tightened below 140 m.
+            geometry=Point(stationary.x + 110.0, stationary.y - 85.0),
         )
     )
 
@@ -169,17 +190,43 @@ def _ais_rows() -> list[dict]:
         )
     )
 
+    # 70 m from its own detection towards the dark vessel, so 130 m from that one: inside the
+    # tolerance of both, and the one-to-one assignment must award it to the nearer.
     simple = _by_name("simple_match")
+    towards_dark = sin(radians(60.0)), cos(radians(60.0))
     rows.append(
         dict(
             mmsi="219000004",
             timestamp=ACQUIRED_AT,
             length_m=60.0,
-            geometry=Point(simple.x + 30.0, simple.y),
+            geometry=Point(simple.x + 70.0 * towards_dark[0], simple.y + 70.0 * towards_dark[1]),
         )
     )
 
     # "dark_vessel" gets no AIS row at all — nothing declares it, so it stays dark.
+
+    # Stale reports, both beyond the default max gap. The trawler's lone report is 14 minutes
+    # old and 60 m from it; the sixth vessel last reported 25 minutes before the pass, 320 m
+    # from the dark vessel — close enough to "explain" it once both gap and tolerance are
+    # loosened far enough.
+    trawler = _by_name("faint_trawler")
+    rows.append(
+        dict(
+            mmsi="219000005",
+            timestamp=ACQUIRED_AT - timedelta(minutes=14),
+            length_m=24.0,
+            geometry=Point(trawler.x - 36.0, trawler.y - 48.0),
+        )
+    )
+    dark = _by_name("dark_vessel")
+    rows.append(
+        dict(
+            mmsi="219000006",
+            timestamp=ACQUIRED_AT - timedelta(minutes=25),
+            length_m=110.0,
+            geometry=Point(dark.x + 192.0, dark.y - 256.0),
+        )
+    )
     return rows
 
 

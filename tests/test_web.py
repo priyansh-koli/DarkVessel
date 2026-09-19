@@ -98,8 +98,8 @@ def test_registering_the_dark_position_reclassifies_it():
 
 
 def test_the_ais_summary_reports_the_cleaning_rules(payload):
-    assert payload["ais"]["rows_in"] == 6
-    assert payload["ais"]["vessels"] == 4
+    assert payload["ais"]["rows_in"] == 8
+    assert payload["ais"]["vessels"] == 6
     assert "duplicate_mmsi_timestamp" in payload["ais"]["removed"]
 
 
@@ -146,7 +146,7 @@ def test_run_honours_the_azimuth_toggle(client):
 
 
 def test_run_accepts_registered_positions(client):
-    response = client.get("/api/run", params={"register": ["500900,6100900"]})
+    response = client.get("/api/run", params={"register": ["500935,6099900"]})
     assert response.json()["counts"]["structure"] == 1
 
 
@@ -297,3 +297,19 @@ def test_declarations_carry_course_and_speed_for_the_radar_view(payload):
     assert fast["speed_kn"] > 10
     assert by_mmsi["219000001"]["course_deg"] is None
     assert by_mmsi["219000001"]["speed_kn"] is None
+
+
+def test_every_fusion_and_detector_control_changes_the_result():
+    """The fixture is built so that no viewer control is inert: each one, moved away from its
+    default, changes the counts."""
+    viewer = Viewer(_scene(), _ais())
+    default = viewer.run(RunRequest())["counts"]
+    for changed in (
+        RunRequest(tolerance_m=100),
+        RunRequest(detector_threshold=0.3),
+        RunRequest(detector_threshold=0.7),
+        RunRequest(max_gap_minutes=30, tolerance_m=350),
+    ):
+        assert viewer.run(changed)["counts"] != default, changed
+    stale_gap = viewer.run(RunRequest(detector_threshold=0.3, max_gap_minutes=15))["counts"]
+    assert stale_gap != viewer.run(RunRequest(detector_threshold=0.3))["counts"]

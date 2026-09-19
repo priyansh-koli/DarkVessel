@@ -46,7 +46,11 @@
       <p class="hint hint-block static-note" id="static-note" hidden></p>
 
       <div class="field">
-        <label for="tolerance">Match tolerance</label>
+        <div class="field-label">
+          <label for="tolerance">Match tolerance</label>
+          <button type="button" class="info" aria-label="About match tolerance" aria-describedby="tip-tolerance">i</button>
+          <span class="info-tip" role="tooltip" id="tip-tolerance"><b>What it is:</b> the furthest a declared AIS position may sit from a radar detection and still be paired with it, one declaration per detection.<br><b>Use:</b> tighten it and loosely placed reports stop explaining their vessels, so they turn dark; loosen it and another vessel's report can start hiding a dark one.<br><b>On the radar:</b> the dashed ring round each AIS declaration.</span>
+        </div>
         <div class="field-row">
           <input type="range" id="tolerance" min="25" max="1000" step="25" value="200">
           <output for="tolerance" id="tolerance-out" class="num">200 m</output>
@@ -55,7 +59,11 @@
       </div>
 
       <div class="field">
-        <label for="maxgap">Max AIS gap</label>
+        <div class="field-label">
+          <label for="maxgap">Max AIS gap</label>
+          <button type="button" class="info" aria-label="About max AIS gap" aria-describedby="tip-maxgap">i</button>
+          <span class="info-tip" role="tooltip" id="tip-maxgap"><b>What it is:</b> how old a vessel's nearest AIS report may be when no pair of reports brackets the acquisition. Bracketed tracks are interpolated whatever the gap.<br><b>Use:</b> lengthen it to let stale reports into the search. Here a trawler last reported 14 min before the pass, and another vessel 25 min before, near the dark contact.<br><b>On the radar:</b> declarations appear or vanish.</span>
+        </div>
         <div class="field-row">
           <input type="range" id="maxgap" min="1" max="120" step="1" value="10">
           <output for="maxgap" id="maxgap-out" class="num">10 min</output>
@@ -67,7 +75,9 @@
         <label class="switch" for="azimuth">
           <input type="checkbox" id="azimuth" checked>
           <span class="switch-text">
-            Azimuth-shift correction
+            <span class="field-label">Azimuth-shift correction
+              <button type="button" class="info" aria-label="About azimuth-shift correction" aria-describedby="tip-azimuth">i</button>
+              <span class="info-tip" role="tooltip" id="tip-azimuth"><b>What it is:</b> SAR draws a moving vessel displaced along the satellite's track, in proportion to its speed towards the radar.<br><b>Use:</b> leave it on so a fast vessel's AIS report is moved to where the radar actually drew it. Off, the fast vessel reads dark.<br><b>On the radar:</b> the orange dashed line from raw to corrected position.</span></span>
             <span class="hint">Move each declaration to where the radar would draw a moving vessel.</span>
           </span>
         </label>
@@ -77,7 +87,11 @@
     <section class="panel">
       <h2 class="panel-title">Detector</h2>
       <div class="field">
-        <label for="threshold">Brightness threshold</label>
+        <div class="field-label">
+          <label for="threshold">Brightness threshold</label>
+          <button type="button" class="info" aria-label="About brightness threshold" aria-describedby="tip-threshold">i</button>
+          <span class="info-tip" role="tooltip" id="tip-threshold"><b>What it is:</b> the minimum normalised pixel brightness, 0 to 1, the stand-in detector counts as a target. Each connected bright blob is one detection.<br><b>Use:</b> lower it to pick up faint, small craft; raise it to keep only strong returns. Targets here range from 0.35 to 0.90.<br><b>On the radar:</b> contacts appear or disappear.</span>
+        </div>
         <div class="field-row">
           <input type="range" id="threshold" min="0.05" max="1" step="0.05" value="0.5">
           <output for="threshold" id="threshold-out" class="num">0.50</output>
@@ -97,7 +111,11 @@
         <span class="btn-icon" aria-hidden="true">✛</span> Register by clicking the scene
       </button>
       <div class="field" style="margin-top:14px">
-        <label for="register-tolerance">Same-position tolerance</label>
+        <div class="field-label">
+          <label for="register-tolerance">Same-position tolerance</label>
+          <button type="button" class="info" aria-label="About same-position tolerance" aria-describedby="tip-register-tolerance">i</button>
+          <span class="info-tip" role="tooltip" id="tip-register-tolerance"><b>What it is:</b> the radius round each registered fixed position (a turbine, a platform) inside which a dark detection counts as that structure.<br><b>Use:</b> register a position by clicking the scene, then widen this until the dark contact is reclassified. Matched vessels are never reclassified.<br><b>On the radar:</b> the ring round each registered cross.</span>
+        </div>
         <div class="field-row">
           <input type="range" id="register-tolerance" min="25" max="500" step="25" value="100">
           <output for="register-tolerance" id="register-tolerance-out" class="num">100 m</output>
@@ -124,8 +142,8 @@
           <button type="button" data-display="radar" aria-pressed="true">Radar</button>
           <button type="button" data-display="sar" aria-pressed="false">SAR image</button>
         </div>
-        <button type="button" class="icon-btn icon-btn-wide radar-only" id="sweep-toggle"
-                aria-pressed="true">Pause sweep</button>
+        <button type="button" class="icon-btn icon-btn-wide" id="sweep-toggle"
+                aria-pressed="true">Pause</button>
       </div>
       <div class="viewer-tools">
         <button type="button" class="icon-btn" id="zoom-out" aria-label="Zoom out">−</button>
@@ -159,6 +177,7 @@
       </div>
       <div class="stage-state" id="stage-state" hidden></div>
       <div class="scalebar" id="scalebar" aria-hidden="true"><span></span><em></em></div>
+      <div class="motion-clock" id="motion-clock" aria-hidden="true"></div>
     </div>
 
     <ul class="legend" aria-label="Legend">
@@ -169,6 +188,8 @@
       <li><span class="key key-vector" aria-hidden="true"></span>Speed vector — 20 seconds ahead</li>
       <li><span class="key key-decl" aria-hidden="true"></span>AIS declaration</li>
       <li><span class="key key-shift" aria-hidden="true"></span>Azimuth shift applied</li>
+      <li><span class="key key-tol" aria-hidden="true"></span>Match tolerance around a declaration</li>
+      <li><span class="key key-trail" aria-hidden="true"></span>Track — contacts move at their declared course and speed; dark contacts drift at an assumed speed</li>
     </ul>
 
     <section class="panel panel-table">
