@@ -20,7 +20,7 @@ Run from the project root:
 
 ```bash
 source .venv/bin/activate          # if missing: python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
-pytest -q                           # expect: 185 passed
+pytest -q                           # expect: 189 passed
 ruff check src/ tests/              # expect: All checks passed!
 darkvessel synthesise --out data/synthetic
 darkvessel run --config configs/pipeline.yaml
@@ -29,7 +29,7 @@ darkvessel run --config configs/pipeline.yaml
 ```
 
 Without the `detector` extra, 5 of those tests (the ones needing torch) are skipped, and pytest
-reports `180 passed, 5 skipped` — that is what CI shows, since it installs `.[dev]` only.
+reports `184 passed, 5 skipped` — that is what CI shows, since it installs `.[dev]` only.
 
 The detector, if the LS-SSDD data is in `data/lsssdd/` (see [models/README.md](models/README.md)
 for the download):
@@ -42,7 +42,7 @@ darkvessel evaluate --detector cnn # expect: test_offshore F1 0.866, test F1 0.5
 
 ---
 
-## Current state (as of 2026-09-19)
+## Current state (as of 2026-09-20)
 
 | Area | Status |
 |---|---|
@@ -57,11 +57,10 @@ darkvessel evaluate --detector cnn # expect: test_offshore F1 0.866, test F1 0.5
 | Analysis — archive-wide concentration analysis, static map | **Not started** |
 | Real data | **Training data only.** LS-SSDD-v1.0 (real Sentinel-1 chips, labelled) is in `data/lsssdd/` (7.8 GB zip + 2.7 GB extracted, git-ignored). The pipeline itself still runs only on the synthetic fixture: no real scene or DMA AIS file yet |
 
-- Tests: 185 passing locally (180 + 5 skipped in CI, which has no torch). Lint: clean.
+- Tests: 189 passing locally (184 + 5 skipped in CI, which has no torch). Lint: clean.
 - Git: `main` tracks `origin` = https://github.com/priyansh-koli/DarkVessel (public). Every push
-  to `main` runs CI and republishes the viewer. **The 2026-09-18 detector / radar / share
-  session is uncommitted** — last commit is `b2e8a20`; `models/` and the new `detect/` modules
-  are untracked. Commit and push to publish it (it also fixes Share on the live site).
+  to `main` runs CI and republishes the viewer. Working tree clean and in sync with `origin/main`;
+  last commit is `97abc44`, which published the detector, radar display and share fix.
 - Python: the dev machine has only system Python 3.9.6, so the project targets `>=3.9`.
 
 ## Next steps
@@ -135,6 +134,16 @@ In rough priority order — see [Final_goal.md](Final_goal.md) for why.
 ---
 
 ## Session log
+
+### 2026-09-20 — progress log reconciled with the code
+
+- Re-ran the health check: `pytest -q` → 189 passed, `ruff check src/ tests/` → clean.
+- Corrected the recorded test counts, which had drifted: 185 → 189 locally, and 180 → 184 for
+  the no-torch run CI does (5 torch tests still skip there).
+- Corrected the Git note. It still said the 2026-09-18 detector / radar / share session was
+  uncommitted at `b2e8a20`; that work was published in `97abc44` and the tree is clean.
+- Added `.DS_Store` to `.gitignore` — Finder had left them in the root and in `src/`.
+- Nothing in `src/` changed; this entry is bookkeeping only.
 
 ### 2026-09-18 — trained detector, radar scene, share fix
 

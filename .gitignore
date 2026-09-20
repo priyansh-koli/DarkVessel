@@ -8,3 +8,4 @@ outputs/
 site/
 data/lsssdd/
 build/
+.DS_Store
