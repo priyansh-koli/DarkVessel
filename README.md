@@ -210,7 +210,7 @@ went in.
 
 ## Status
 
-**Built and tested (185 tests passing):** the full Tier-1 core — tiling and dedup,
+**Built and tested (189 tests passing):** the full Tier-1 core — tiling and dedup,
 pixel→ground, AIS interpolation, azimuth correction, optimal matching, structure register,
 recurrence clustering, the pipeline seam, the CLI, and raw-archive AIS ingestion with every
 cleaning rule counted and auditable — plus the viewer, in both its live and static forms, and a
