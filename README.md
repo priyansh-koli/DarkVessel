@@ -194,8 +194,14 @@ src/darkvessel/
 configs/        run configuration
 models/         the trained detector, its model card, benchmarks and training logs
 tests/          unit tests for every geometry-critical path
+docs/           deployment, requirements, the goal and the progress log
 Dockerfile      the live app, for any container platform
 ```
+
+The working documents live in [`docs/`](docs/): [deployment.md](docs/deployment.md) (how to
+host it), [requirements.md](docs/requirements.md) (what it needs to run),
+[final-goal.md](docs/final-goal.md) (where it is going) and
+[progress.md](docs/progress.md) (the session-by-session record).
 
 The detector arrives as a *parameter*, never an import. That is what lets the whole chain run
 and be tested with a deterministic stand-in; a trained CNN satisfying the same `Detector`
