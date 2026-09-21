@@ -42,7 +42,7 @@ darkvessel evaluate --detector cnn # expect: test_offshore F1 0.866, test F1 0.5
 
 ---
 
-## Current state (as of 2026-09-20)
+## Current state (as of 2026-09-21)
 
 | Area | Status |
 |---|---|
@@ -134,6 +134,39 @@ In rough priority order — see [final-goal.md](final-goal.md) for why.
 ---
 
 ## Session log
+
+### 2026-09-21 — repository tidied and the working documents moved into `docs/`
+
+- **Moved four documents into `docs/`** as tracked renames: `DEPLOYMENT.md` →
+  `docs/deployment.md`, `Final_goal.md` → `docs/final-goal.md`, `requirements.md` and
+  `progress.md` (this file) likewise. `README.md`, `LICENSE` and `models/README.md` stayed
+  where they were. Every cross-reference was updated — the links inside these four, the
+  pointer in `README.md`, two mentions in `models/README.md` and one comment in
+  `detect/cfar.py`. `grep` for the old names now returns nothing.
+- **Added a `docs/` line and a document index to the README's repository layout**, so the
+  moved files are still findable from the entry point.
+- **Corrected the README's test count**: it claimed 185, the suite is 189. The health check
+  above already had the right number.
+- **Deleted `data/lsssdd/LS-SSDD-v1.0-OPEN.zip` (8.3 GB).** It was fully extracted alongside
+  itself — 9,000 sub-images and 9,000 annotations verified present before removing it. The
+  download command is in `models/README.md` if it is ever needed again.
+- **Deleted regenerable clutter:** `.pytest_cache/`, `.ruff_cache/`, `src/darkvessel.egg-info/`,
+  `outputs/`, three `.DS_Store` files, and `site/` — which was a *stale* build from before
+  `b2e8a20`, missing `guide.html`, `about.html` and `data/manifest.json`. All of it is
+  git-ignored. `site/` and `outputs/` were rebuilt from scratch afterwards.
+- **Nothing in `src/` changed** beyond the one comment. Checked first: every module under
+  `src/darkvessel/` is imported or tested somewhere, and every log in `models/logs/` is cited
+  by `models/README.md`, so there was no dead code or orphaned artifact to remove.
+- **Verified:** `pip install -e ".[dev]"`, `ruff check src/ tests/` → clean, `pytest -q` →
+  189 passed. `darkvessel synthesise` then `darkvessel run` → the exact line CI greps for
+  (`4 matched, 1 dark, 0 at a fixed structure`). `darkvessel render --out site` → all six
+  files the publish workflow asserts, `run.json` total 5, and every run named by the manifest
+  present (17,600 control positions, 1,686 distinct runs).
+- **Committed as five steps** so the move stays reviewable on its own: the renames
+  (`1de6382`), the reference updates (`92c6550`), the README index (`7a54acd`), the test
+  count (`b763a86`), and this entry. Every one leaves the suite green — the only change
+  under `src/` is a comment.
+- **Left undone:** nothing from this session; the next step is still the real-scene run.
 
 ### 2026-09-20 — progress log reconciled with the code
 
