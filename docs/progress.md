@@ -1,7 +1,7 @@
 # darkvessel — progress log
 
 The running record of what has been done on this project, one entry per work session, newest
-first. Read this, [requirements.md](requirements.md) and [Final_goal.md](Final_goal.md) at the
+first. Read this, [requirements.md](requirements.md) and [final-goal.md](final-goal.md) at the
 start of any new session to pick up where the last one stopped.
 
 ## How to use this file
@@ -31,7 +31,7 @@ darkvessel run --config configs/pipeline.yaml
 Without the `detector` extra, 5 of those tests (the ones needing torch) are skipped, and pytest
 reports `184 passed, 5 skipped` — that is what CI shows, since it installs `.[dev]` only.
 
-The detector, if the LS-SSDD data is in `data/lsssdd/` (see [models/README.md](models/README.md)
+The detector, if the LS-SSDD data is in `data/lsssdd/` (see [models/README.md](../models/README.md)
 for the download):
 
 ```bash
@@ -65,7 +65,7 @@ darkvessel evaluate --detector cnn # expect: test_offshore F1 0.866, test F1 0.5
 
 ## Next steps
 
-In rough priority order — see [Final_goal.md](Final_goal.md) for why.
+In rough priority order — see [final-goal.md](final-goal.md) for why.
 
 1. Run the pipeline on one real Sentinel-1 scene and the matching DMA AIS day file, with
    `detector: cnn` — and check the CNN on calibrated backscatter (it was trained on 8-bit chips).
@@ -227,7 +227,7 @@ In rough priority order — see [Final_goal.md](Final_goal.md) for why.
 
 ### 2026-09-18 — continuity files, licence, pre-push cleanup
 
-- Added `progress.md` (this file), `requirements.md` and `Final_goal.md` so the project can be
+- Added `docs/progress.md` (this file), `docs/requirements.md` and `docs/final-goal.md` so the project can be
   resumed from a fresh session with no prior context.
 - Added a `LICENSE` (MIT, © Priyansh Koli) and set the author in `pyproject.toml`.
 - Reworded the README, docstrings, tests, CI comment and pipeline diagram to describe the
@@ -254,7 +254,7 @@ In rough priority order — see [Final_goal.md](Final_goal.md) for why.
 - Set the Python floor to 3.9 (the dev machine has only 3.9.6).
 - Wrote tests for every module (150 total) and mutation-checked them.
 - Built the viewer (`darkvessel serve`, `darkvessel render`), the Dockerfile,
-  `DEPLOYMENT.md`, CI and the GitHub Pages workflow. Fixed three frontend bugs found in a real
+  `docs/deployment.md`, CI and the GitHub Pages workflow. Fixed three frontend bugs found in a real
   browser: the loading overlay never cleared (CSS `display` overriding `hidden`), marker
   labels frozen at one size, and a rendering artifact from the toggle switch's hidden input.
 

@@ -12,7 +12,7 @@ Sentinel-1 scene. It satisfies the pipeline's `Detector` protocol, so it's used 
 LS-SSDD-v1.0 (Zhang et al., *Remote Sensing* 2020): 15 Sentinel-1 IW scenes cut into 9,000
 labelled 800×800 sub-images, 6,015 ships. It comes from the authors' release,
 https://github.com/TianwenZhang0825/LS-SSDD-v1.0-OPEN (Apache-2.0). It isn't in this repository;
-see `requirements.md` for where to put it.
+see `docs/requirements.md` for where to put it.
 
 | Split | Scenes | Sub-images | Ships | Used for |
 |---|---|---|---|---|
@@ -62,7 +62,7 @@ scenes. Speed per 800×800 image, including JPEG decoding: CNN 46 ms on an Apple
 - **Inshore, both detectors are poor, and the CNN is worse.** Its false alarms concentrate in a
   few scenes: dense urban land, whose canal banks read as hulls against a bright median, and a
   band of noisy low-backscatter sea at a swath edge.
-- **Overall F1 is a tie; overall AP favours the CNN.** Milestone 4 in `Final_goal.md` ("beats
+- **Overall F1 is a tie; overall AP favours the CNN.** Milestone 4 in `docs/final-goal.md` ("beats
   the CFAR baseline") holds offshore and on AP, but not on inshore F1.
 - **Mask land before detection.** A coastline mask with a buffer takes away most of what the
   inshore numbers measure, and the planned SAR preprocessing includes one.

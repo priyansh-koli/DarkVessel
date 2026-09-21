@@ -7,7 +7,7 @@ pixels — outside a guard window wide enough that the ship itself does not cont
 background — and the pixel is scored by how many clutter standard deviations it stands above.
 
 No training, a few box filters per window: fast, explainable, and what any learned detector has
-to beat to justify itself (`Final_goal.md`, milestone 4).
+to beat to justify itself (`docs/final-goal.md`, milestone 4).
 
 Pixels at exactly zero are outside the radar swath. They are excluded from every clutter
 estimate and can never be detected, which is what stops the swath edge — a cliff from zero to

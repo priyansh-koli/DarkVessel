@@ -2,7 +2,7 @@
 
 Everything the project needs: platforms, libraries, data, accounts, compute and architecture.
 Items marked **(in use)** are already in `pyproject.toml` or the code. Items marked
-**(planned)** are what the later stages in [Final_goal.md](Final_goal.md) are expected to need;
+**(planned)** are what the later stages in [final-goal.md](final-goal.md) are expected to need;
 they are recommendations, not commitments, and should be moved to "in use" as they are added.
 
 `pyproject.toml` is the source of truth for installed dependencies. If it disagrees with this
@@ -96,7 +96,7 @@ Credentials must go in environment variables or an untracked file, never in the 
 | Stage | Needs |
 |---|---|
 | Core pipeline, tests, viewer | Any laptop. No GPU, no network. |
-| One real Sentinel-1 scene | ~1–2 GB RAM per scene (the scene is held in memory as float32; see `DEPLOYMENT.md`). Tiled reading will be needed for full scenes. |
+| One real Sentinel-1 scene | ~1–2 GB RAM per scene (the scene is held in memory as float32; see `docs/deployment.md`). Tiled reading will be needed for full scenes. |
 | Detector training | A GPU (local CUDA, Colab, or cloud). Inference runs on CPU. |
 | Archive-wide run | Disk for the scene archive (~1 GB per GRD scene), batch execution. |
 | Live viewer hosting | Small container instance, ~400 MB image. Static bundle: any static host, ~80 KB. |

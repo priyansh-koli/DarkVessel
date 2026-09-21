@@ -75,7 +75,7 @@ darkvessel render --config configs/pipeline.yaml --out site
 python -m http.server -d site 8080
 ```
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for what each hosting shape needs and how to deploy it.
+See [docs/deployment.md](docs/deployment.md) for what each hosting shape needs and how to deploy it.
 
 ## How it works
 
