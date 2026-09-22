@@ -13,7 +13,9 @@
 
   --text:      #e8eef7;
   --muted:     #94a6bd;
-  --faint:     #64748b;
+  /* Contrast-checked against --bg, --panel and --panel-2: the old #64748b sat at 3.5-4.1:1
+     and failed WCAG AA for the hint text, captions and table headers that use it. */
+  --faint:     #7d8da3;
 
   --accent:    #4ea8de;
   --accent-dim:#1d4e6b;
