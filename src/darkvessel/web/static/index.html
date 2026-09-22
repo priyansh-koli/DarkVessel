@@ -173,7 +173,9 @@
       <div class="stage-inner" id="stage-inner">
         <canvas id="scene-canvas" aria-hidden="true"></canvas>
         <div class="sweep-clip radar-only" aria-hidden="true"><div class="sweep" id="sweep"></div></div>
-        <svg id="overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
+        <!-- Not aria-hidden: it holds the focusable detection marks. Its decorative
+             layers are hidden one by one in app.js. -->
+        <svg id="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
       </div>
       <div class="stage-state" id="stage-state" hidden></div>
       <div class="scalebar" id="scalebar" aria-hidden="true"><span></span><em></em></div>

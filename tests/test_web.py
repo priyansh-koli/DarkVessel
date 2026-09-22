@@ -183,6 +183,15 @@ def test_the_guide_and_how_it_works_pages_are_served(client):
         assert client.get(f"/{page}").status_code == 200
 
 
+def test_the_overlay_does_not_hide_its_own_focusable_detections(client):
+    """The detection marks are focusable buttons built into #overlay. aria-hidden on the
+    overlay would take every one of them out of the accessibility tree while leaving them in
+    the tab order, which is the worst of both."""
+    html = client.get("/").text
+    overlay = html[html.index('<svg id="overlay"') :].split(">", 1)[0]
+    assert "aria-hidden" not in overlay
+
+
 def test_the_page_does_not_make_itself_a_scroll_container(client):
     """`overflow-x: hidden` on html/body turns them into scroll containers, which silently
     disables every `position: sticky` on the page — the control column, the inspector column

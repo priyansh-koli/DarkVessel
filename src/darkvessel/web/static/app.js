@@ -1646,6 +1646,10 @@
 
   function group(parent, name) {
     const g = el("g", { "data-layer": name });
+    // Only the marks carry meaning: each is a focusable button naming its detection. The rest
+    // of the overlay is decoration for the eye, and is hidden from assistive technology here
+    // rather than on the whole overlay, which would have hidden the marks with it.
+    if (name !== "marks") g.setAttribute("aria-hidden", "true");
     parent.append(g);
     return g;
   }
