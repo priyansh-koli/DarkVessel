@@ -40,6 +40,7 @@
     <li><a href="#statuses">The four statuses</a></li>
     <li><a href="#controls">Controls</a></li>
     <li><a href="#shortcuts">Keyboard</a></li>
+    <li><a href="#glossary">Glossary</a></li>
     <li><a href="#faq">FAQ</a></li>
     <li><a href="#run">Run it yourself</a></li>
   </ul>
@@ -161,6 +162,78 @@
       <tr><td><kbd>Esc</kbd></td><td>anywhere</td><td>Stop registering a position, or close the share panel</td></tr>
     </tbody>
   </table>
+
+  <h2 id="glossary">Glossary</h2>
+  <p>The terms the viewer, the table and the inspector use, in the sense they are used here.</p>
+  <dl class="glossary">
+    <div>
+      <dt>AIS<span class="term-abbr">Automatic Identification System</span></dt>
+      <dd>The transponder system ships are required to broadcast their identity, position,
+        course and speed on. A <em>declaration</em> is one such report.</dd>
+    </div>
+    <div>
+      <dt>SAR<span class="term-abbr">Synthetic Aperture Radar</span></dt>
+      <dd>Radar that builds a high-resolution image from a moving platform. Sentinel-1 carries
+        one, and it sees through cloud and darkness, so a pass works at night and in weather.</dd>
+    </div>
+    <div>
+      <dt>Dark vessel</dt>
+      <dd>A vessel the radar drew that no AIS declaration explains. It is a statement about
+        the evidence searched, not an accusation: a transponder may be off, broken, or the
+        archive may simply not cover it.</dd>
+    </div>
+    <div>
+      <dt>Detection</dt>
+      <dd>One target the detector found in the radar scene, reduced to a single point. The
+        pipeline compares points, not boxes, because most vessels at this pixel scale are a
+        handful of pixels across.</dd>
+    </div>
+    <div>
+      <dt>Declaration</dt>
+      <dd>A vessel's AIS position placed at the exact instant the radar image was taken,
+        interpolated between the reports either side of it where they exist.</dd>
+    </div>
+    <div>
+      <dt>Match tolerance</dt>
+      <dd>The furthest a declaration may sit from a detection and still explain it. Every dark
+        count is only meaningful alongside the tolerance it was measured at.</dd>
+    </div>
+    <div>
+      <dt>Azimuth shift</dt>
+      <dd>Radar reads along-track position from Doppler, so a moving vessel is drawn displaced
+        along the satellite's ground track, in proportion to its speed towards the radar.
+        Uncorrected, fast vessels read as dark.</dd>
+    </div>
+    <div>
+      <dt>Interpolated / nearest</dt>
+      <dd>How a declaration's position was arrived at. <em>Interpolated</em> means two reports
+        bracketed the acquisition and the position between them was computed.
+        <em>Nearest</em> means only one report was close enough to use, so it was taken as-is
+        and the inspector says how stale it was.</dd>
+    </div>
+    <div>
+      <dt>MMSI<span class="term-abbr">Maritime Mobile Service Identity</span></dt>
+      <dd>The nine-digit number identifying a vessel's transponder. It is how a declaration
+        is tied to a vessel.</dd>
+    </div>
+    <div>
+      <dt>Structure</dt>
+      <dd>A fixed installation — a turbine, a platform — that returns a radar echo on every
+        pass. Registered positions are excluded from the vessel count, and only after matching,
+        so a vessel AIS explains is never reclassified.</dd>
+    </div>
+    <div>
+      <dt>Tile / overlap</dt>
+      <dd>A scene is detected in overlapping windows. Each tile owns a non-overlapping core and
+        reports only what falls inside it, so every target is claimed exactly once.</dd>
+    </div>
+    <div>
+      <dt>CFAR<span class="term-abbr">Constant False Alarm Rate</span></dt>
+      <dd>The classical radar detector, which compares each pixel with the sea clutter around
+        it rather than a fixed level. It is the baseline the trained detector is measured
+        against — see <a href="about.html#detector">How it works</a>.</dd>
+    </div>
+  </dl>
 
   <h2 id="faq">FAQ</h2>
   <div class="faq">
