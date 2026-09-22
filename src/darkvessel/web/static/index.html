@@ -125,11 +125,6 @@
       <button type="button" class="btn btn-quiet" id="clear-structures" hidden>Clear register</button>
     </section>
 
-    <section class="panel" id="ais-panel">
-      <h2 class="panel-title">AIS search space</h2>
-      <div id="ais-summary"></div>
-    </section>
-
     <button type="button" class="btn btn-quiet" id="reset">Reset to defaults</button>
   </aside>
 
@@ -182,17 +177,6 @@
       <div class="motion-clock" id="motion-clock" aria-hidden="true"></div>
     </div>
 
-    <ul class="legend" aria-label="Legend">
-      <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><path class="g-matched" d="M0 -9 L4.5 -2 L4.5 7 L-4.5 7 L-4.5 -2 Z"/></svg>Matched — hull points along its AIS course</li>
-      <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><path class="g-dark" d="M0 -8 L8 0 L0 8 L-8 0 Z"/></svg>Dark — searched, nothing explains it</li>
-      <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><rect class="g-structure" x="-6" y="-6" width="12" height="12"/></svg>Structure — a registered fixed position</li>
-      <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><circle class="g-unsearched" r="5"/></svg>Unsearched — no AIS supplied</li>
-      <li><span class="key key-vector" aria-hidden="true"></span>Speed vector — 20 seconds ahead</li>
-      <li><span class="key key-decl" aria-hidden="true"></span>AIS declaration</li>
-      <li><span class="key key-shift" aria-hidden="true"></span>Azimuth shift applied</li>
-      <li><span class="key key-tol" aria-hidden="true"></span>Match tolerance around a declaration</li>
-      <li><span class="key key-trail" aria-hidden="true"></span>Track — contacts move at their declared course and speed; dark contacts drift at an assumed speed</li>
-    </ul>
 
     <section class="panel panel-table">
       <div class="panel-head">
@@ -224,9 +208,33 @@
   </section>
 
   <!-- ─────────────── inspector ─────────────── -->
-  <aside class="col col-inspector" aria-label="Detection inspector">
+  <aside class="col col-inspector" aria-label="Inspector and scene reference">
     <section class="panel panel-inspector" id="inspector" aria-live="polite">
       <!-- filled by app.js -->
+    </section>
+
+    <!-- The key sits beside the scene rather than under it: it is read while looking at the
+         radar, and the column to the right of a square scene was otherwise empty. -->
+    <section class="panel panel-legend">
+      <h2 class="panel-title">Key</h2>
+      <ul class="legend" aria-label="Legend">
+      <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><path class="g-matched" d="M0 -9 L4.5 -2 L4.5 7 L-4.5 7 L-4.5 -2 Z"/></svg>Matched — hull points along its AIS course</li>
+      <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><path class="g-dark" d="M0 -8 L8 0 L0 8 L-8 0 Z"/></svg>Dark — searched, nothing explains it</li>
+      <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><rect class="g-structure" x="-6" y="-6" width="12" height="12"/></svg>Structure — a registered fixed position</li>
+      <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><circle class="g-unsearched" r="5"/></svg>Unsearched — no AIS supplied</li>
+      <li><span class="key key-vector" aria-hidden="true"></span>Speed vector — 20 seconds ahead</li>
+      <li><span class="key key-decl" aria-hidden="true"></span>AIS declaration</li>
+      <li><span class="key key-shift" aria-hidden="true"></span>Azimuth shift applied</li>
+      <li><span class="key key-tol" aria-hidden="true"></span>Match tolerance around a declaration</li>
+      <li><span class="key key-trail" aria-hidden="true"></span>Track — contacts move at their declared course and speed; dark contacts drift at an assumed speed</li>
+      </ul>
+    </section>
+
+    <section class="panel" id="ais-panel">
+      <h2 class="panel-title">AIS search space</h2>
+      <p class="hint hint-block">What the search actually had to explain these detections
+        with. A dark call is only as good as this.</p>
+      <div id="ais-summary"></div>
     </section>
   </aside>
 </main>

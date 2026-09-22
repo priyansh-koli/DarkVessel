@@ -340,7 +340,8 @@ input[type="range"]:disabled { opacity: .45; cursor: not-allowed; }
 .stage {
   position: relative;
   aspect-ratio: 1 / 1;
-  max-height: 62vh;
+  /* The key moved into the right-hand column, so the scene can take the height it left. */
+  max-height: 72vh;
   background:
     linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px) 0 0 / 100% 40px,
     linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px) 0 0 / 40px 100%,
@@ -550,6 +551,12 @@ input[type="range"]:disabled { opacity: .45; cursor: not-allowed; }
   font-size: 11.5px; color: var(--muted);
 }
 .legend li { display: flex; align-items: center; gap: 7px; }
+
+/* In the right-hand column the key reads as a list, one entry per line, so a long label
+   wraps under its own glyph instead of colliding with the next entry. */
+.panel-legend .legend { flex-direction: column; flex-wrap: nowrap; gap: 9px; }
+.panel-legend .legend li { align-items: flex-start; line-height: 1.45; }
+.panel-legend .legend .key, .panel-legend .legend .key-glyph { margin-top: 1px; }
 .key { width: 11px; height: 11px; flex: none; }
 .key-matched   { border: 2px solid var(--matched); }
 .key-dark      { border: 2px solid var(--dark); }
@@ -767,6 +774,13 @@ kbd {
   .col-inspector { grid-column: 1 / -1; position: static; }
   .panel-inspector { min-height: 0; }
   .inspector-empty { min-height: 140px; }
+  /* Full width again: the key goes back to flowing across, and the three panels share the row. */
+  .col-inspector { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); align-items: start; }
+  .panel-legend .legend { flex-direction: row; flex-wrap: wrap; gap: 8px 20px; }
+}
+
+@media (max-width: 900px) {
+  .col-inspector { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 900px) {
