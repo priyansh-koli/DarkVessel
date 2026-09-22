@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>How it works — darkvessel</title>
-<meta name="description" content="How darkvessel fuses Sentinel-1 SAR detections with AIS declarations, and the two silent errors the design avoids.">
+<meta name="description" content="How darkvessel fuses Sentinel-1 SAR detections with AIS declarations, the two silent errors the design avoids, and how the trained detector measures against a CFAR baseline.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🛰️</text></svg>">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -39,6 +39,7 @@
     <li><a href="#pipeline">The pipeline</a></li>
     <li><a href="#design">Four design choices</a></li>
     <li><a href="#errors">Two errors it avoids</a></li>
+    <li><a href="#detector">The detector</a></li>
     <li><a href="#limits">What it can't yet claim</a></li>
   </ul>
 
@@ -88,7 +89,7 @@
   <p>Sorting every detection–declaration pair by distance and claiming the closest first
     doesn't find the most matches. At a 100 m tolerance:</p>
   <table class="shortcuts" style="max-width:360px">
-    <thead><tr><th scope="col"></th><th scope="col">A1</th><th scope="col">A2</th></tr></thead>
+    <thead><tr><th scope="col"><span class="sr-only">Detection</span></th><th scope="col">A1</th><th scope="col">A2</th></tr></thead>
     <tbody>
       <tr><th scope="row">D1</th><td>90 m</td><td>95 m</td></tr>
       <tr><th scope="row">D2</th><td>98 m</td><td>283 m ✗</td></tr>
@@ -105,12 +106,67 @@
     something counts as a structure would depend on how the file was sorted. darkvessel uses
     connected components instead, which give the same answer for every order.</p>
 
+  <h2 id="detector">The detector</h2>
+  <p>The viewer here runs a deterministic stand-in: it flags pixels above a brightness
+    threshold, which is enough to exercise the rest of the chain and nothing more. The
+    detector arrives as a <em>parameter</em>, never an import, so a real one drops in without
+    anything else changing — and one has.</p>
+  <p><strong>CentreNet</strong>, a small U-Net of 0.39 M parameters, predicts a heatmap of ship
+    centres. It was trained on LS-SSDD-v1.0: 15 Sentinel-1 scenes cut into 9,000 labelled
+    sub-images. Validation is held out <em>by scene</em>, because neighbouring sub-images share
+    sea state and often the same ships, so a random split would leak. Each detector's threshold
+    is chosen on validation and applied unchanged to the official test scenes.</p>
+
+  <table class="shortcuts">
+    <caption class="sr-only">Detector performance on the LS-SSDD test scenes, comparing the
+      classical CFAR baseline with the trained CNN, split by inshore and offshore.</caption>
+    <thead>
+      <tr>
+        <th scope="col">LS-SSDD test</th><th scope="col">Detector</th>
+        <th scope="col">Precision</th><th scope="col">Recall</th>
+        <th scope="col">F1</th><th scope="col">AP</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row" rowspan="2">Offshore<br><span class="cell-sub">2,234 images</span></th>
+        <td>CFAR</td><td>0.596</td><td>0.817</td><td>0.689</td><td>0.790</td></tr>
+      <tr><td><strong>CNN</strong></td><td><strong>0.824</strong></td><td><strong>0.912</strong></td>
+        <td><strong>0.866</strong></td><td><strong>0.951</strong></td></tr>
+      <tr><th scope="row" rowspan="2">Inshore<br><span class="cell-sub">766 images</span></th>
+        <td><strong>CFAR</strong></td><td><strong>0.265</strong></td><td>0.295</td>
+        <td><strong>0.279</strong></td><td><strong>0.176</strong></td></tr>
+      <tr><td>CNN</td><td>0.138</td><td><strong>0.321</strong></td><td>0.193</td><td>0.117</td></tr>
+      <tr><th scope="row" rowspan="2">All<br><span class="cell-sub">3,000 images</span></th>
+        <td>CFAR</td><td><strong>0.488</strong></td><td>0.623</td><td><strong>0.547</strong></td><td>0.563</td></tr>
+      <tr><td>CNN</td><td>0.444</td><td><strong>0.692</strong></td><td>0.541</td><td><strong>0.626</strong></td></tr>
+    </tbody>
+  </table>
+  <p class="table-note">The baseline is two-parameter CA-CFAR, the classical radar detector,
+    with its windows and threshold tuned on the same validation scenes. A prediction counts as
+    a hit when it falls inside a ship's box, paired one-to-one by optimal assignment — the same
+    reasoning as the fusion step. AP is threshold-free.</p>
+
+  <h3>What the numbers say, including where they don't flatter it</h3>
+  <p><strong>At sea the CNN is clearly better:</strong> it finds 91% of ships with less than
+    half of CFAR's false alarms, and open sea is where a dark vessel is searched for.</p>
+  <p><strong>Inshore both are poor, and the CNN is worse.</strong> Its false alarms concentrate
+    in a few scenes: dense urban land whose canal banks read as hulls, and a band of noisy
+    low-backscatter sea at a swath edge. Overall F1 is therefore a tie, and only AP favours the
+    CNN. The remedy is a land mask before detection, not more training — hard-negative
+    fine-tuning was tried and inshore AP <em>fell</em>, because the training scenes' land
+    doesn't look like the test city.</p>
+  <p>Reporting the inshore column rather than the offshore one alone is the point. A detector
+    that is excellent in one regime and poor in another is two different claims, and the
+    honest summary is both.</p>
+
   <h2 id="limits">What it can't yet claim</h2>
   <div class="callout">
-    <p>The published viewer runs on a <strong>synthetic scene</strong> with a deterministic
-      stand-in detector. It shows that the reasoning is right, not that the detector is good.
-      The next steps are one real Sentinel-1 scene with its matching DMA AIS day file, then a
-      trained detector.</p>
+    <p>The published viewer runs on a <strong>synthetic scene</strong> with the deterministic
+      stand-in. It shows that the reasoning is right, not that the detector is good. The
+      trained detector above has been measured only against LS-SSDD's 8-bit imagery; it has
+      not yet been run on a calibrated Sentinel-1 scene, and the two paths — real scene and
+      trained detector — have not yet met. The next step is one real Sentinel-1 scene with its
+      matching DMA AIS day file.</p>
   </div>
   <p>Where results are modest, they should be reported as modest. A detector that usefully
     <em>ranks</em> candidates for inspection is a different, more honest claim than one that
