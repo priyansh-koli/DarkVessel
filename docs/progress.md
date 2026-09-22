@@ -20,7 +20,7 @@ Run from the project root:
 
 ```bash
 source .venv/bin/activate          # if missing: python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
-pytest -q                           # expect: 189 passed
+pytest -q                           # expect: 192 passed
 ruff check src/ tests/              # expect: All checks passed!
 darkvessel synthesise --out data/synthetic
 darkvessel run --config configs/pipeline.yaml
@@ -29,7 +29,7 @@ darkvessel run --config configs/pipeline.yaml
 ```
 
 Without the `detector` extra, 5 of those tests (the ones needing torch) are skipped, and pytest
-reports `184 passed, 5 skipped` — that is what CI shows, since it installs `.[dev]` only.
+reports `187 passed, 5 skipped` — that is what CI shows, since it installs `.[dev]` only.
 
 The detector, if the LS-SSDD data is in `data/lsssdd/` (see [models/README.md](../models/README.md)
 for the download):
@@ -42,7 +42,7 @@ darkvessel evaluate --detector cnn # expect: test_offshore F1 0.866, test F1 0.5
 
 ---
 
-## Current state (as of 2026-09-21)
+## Current state (as of 2026-09-22)
 
 | Area | Status |
 |---|---|
@@ -134,6 +134,57 @@ In rough priority order — see [final-goal.md](final-goal.md) for why.
 ---
 
 ## Session log
+
+### 2026-09-22 — viewer layout rebalanced, document pages rebuilt, three accessibility bugs fixed
+
+- **Filled the dead space right of the scene.** The inspector column was 345 px tall against
+  the viewer column's 1007, leaving a 340×660 void. The key moved out from under the scene and
+  the AIS search-space readout moved out of the controls column; both now sit under the
+  inspector, which puts the evidence for a verdict beside the verdict and leaves the left
+  column for controls only. The scene took the freed height (`max-height` 62vh → 72vh, so the
+  radar is 648 px rather than 558). Columns now measure 988 against 999.
+- **`position: sticky` had never worked anywhere on the site.** `overflow-x: hidden` on
+  `html, body` makes them scroll containers, and a sticky descendant then has no scrollport to
+  stick to, so it just scrolls away. That silently disabled the control column, the inspector
+  column and the new contents rail. Changed to `overflow-x: clip`, which suppresses the same
+  overflow without creating a scroll container. Verified: the rail now pins at 88 px through a
+  3,200 px scroll, and no page overflows horizontally at 1600/1280/1024/820/390 px.
+- **The overlay hid its own focusable detections.** `#overlay` carried `aria-hidden="true"`
+  while containing the five detection marks, each a `role="button"` with `tabindex="0"` and a
+  label — so they were in the tab order but absent from the accessibility tree, which is the
+  worst of both. The blanket attribute is gone; `group()` now hides the decorative layers
+  (grid, trails, lines, decls) individually and leaves `marks` exposed. All five are now in the
+  tree with their labels.
+- **Contrast.** `--faint` (`#64748b`) sat at 3.5–4.1:1 against the three panel backgrounds and
+  failed WCAG AA everywhere it was used — hint text under every control, figure captions,
+  table headers. Raised to `#7d8da3`, which measures 4.96:1 at worst and is still visibly
+  dimmer than `--muted`. The counts bar also became a `<section>` so it sits in a landmark.
+  axe-core now reports **0 violations** on all three pages, down from 3 types on the viewer
+  and 1 each on the document pages.
+- **Both document pages rebuilt around a sticky contents rail** with scroll-spy
+  (`aria-current="location"`), which collapses back to the pill list below 1080 px. Added
+  self-linking headings with real anchors that are keyboard-reachable and carry an accessible
+  name, copy buttons on code blocks that fall back to selecting the text where the clipboard
+  API is refused, and a back-to-top control that moves focus to the `h1` rather than leaving
+  it on a button that has just vanished. All of it is progressive enhancement in a new
+  `static/docs.js`; with the script off both pages still read.
+- **Guide:** added a twelve-term **glossary** (AIS, SAR, dark vessel, detection, declaration,
+  match tolerance, azimuth shift, interpolated/nearest, MMSI, structure, tile/overlap, CFAR).
+- **How it works:** added **The detector**, which the site did not mention at all — the CNN
+  against the CFAR baseline on LS-SSDD, with the inshore column reported alongside the
+  offshore one and the hard-negative result that went the wrong way. Corrected "What it can't
+  yet claim", which still listed a trained detector as a future step; the honest remaining gap
+  is that the trained detector and a real scene have not yet met.
+- **Tests:** 189 → 192. The three new ones pin the fixes that would otherwise regress in
+  silence: that every contents entry points at a heading that exists and both pages load
+  `docs.js`, that `#overlay` carries no `aria-hidden`, and that the stylesheet never goes back
+  to `overflow-x: hidden`.
+- **Committed as nine steps**, each one green on its own, with each bug fix carrying its own
+  regression test: the sticky fix (`7792144`), the overlay (`8e1b674`), contrast (`bac0032`),
+  the counts landmark (`3f325fd`), the layout rebalance (`a2f6d52`), the glossary (`ffea8a8`),
+  the detector page (`c41b354`), the document-page rebuild (`c498549`), and this entry.
+- **Verified:** `ruff check` clean, `pytest -q` → 192 passed, `darkvessel render` → every file
+  the publish workflow asserts plus `docs.js`, and axe-core clean on all three pages.
 
 ### 2026-09-21 — repository tidied and the working documents moved into `docs/`
 
