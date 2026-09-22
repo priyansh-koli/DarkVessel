@@ -183,6 +183,15 @@ def test_the_guide_and_how_it_works_pages_are_served(client):
         assert client.get(f"/{page}").status_code == 200
 
 
+def test_the_page_does_not_make_itself_a_scroll_container(client):
+    """`overflow-x: hidden` on html/body turns them into scroll containers, which silently
+    disables every `position: sticky` on the page — the control column, the inspector column
+    and the contents rail all depend on it."""
+    css = client.get("/styles.css").text
+    assert "overflow-x: clip" in css
+    assert "overflow-x: hidden" not in css
+
+
 # ───────────────────────────── the cached viewer ─────────────────────────────
 
 
