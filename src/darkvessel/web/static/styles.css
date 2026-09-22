@@ -664,7 +664,20 @@ td.muted { color: var(--faint); }
 
 /* ───────────────────── document pages (guide, how it works) ───────────────────── */
 
-.doc { max-width: 860px; margin: 0 auto; padding: 36px 20px 80px; }
+.doc { max-width: 1148px; margin: 0 auto; padding: 36px 20px 80px; }
+
+/* The contents rail sits second in the source so a reader meets the prose first, and is
+   placed into the right-hand column explicitly rather than by source order. */
+.doc-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 216px;
+  gap: 0 44px;
+  align-items: start;
+}
+.doc-body { grid-column: 1; grid-row: 1; min-width: 0; }
+/* The first heading's top margin would push the prose below the rail it should line up with. */
+.doc-body > h2:first-child { margin-top: 0; }
+.doc-side { grid-column: 2; grid-row: 1; position: sticky; top: 88px; }
 .doc-hero { margin-bottom: 36px; }
 .doc-kicker {
   font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--accent);
@@ -696,14 +709,77 @@ td.muted { color: var(--faint); }
 }
 .doc figcaption { font-size: 12.5px; color: var(--faint); margin-top: 8px; }
 
-.toc {
-  display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0; margin: 0 0 8px;
+.toc-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
+  color: var(--faint); margin: 0 0 10px;
 }
+.toc { list-style: none; padding: 0; margin: 0; }
 .toc a {
   display: block; font-size: 12.5px; text-decoration: none; color: var(--muted);
-  border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px;
+  padding: 6px 0 6px 13px; border-left: 2px solid var(--line-soft); line-height: 1.4;
 }
-.toc a:hover { color: var(--text); border-color: #2e3d52; }
+.toc a:hover { color: var(--text); border-left-color: #2e3d52; }
+/* "The entry matching the part of the page on screen" — set by docs.js as you scroll. */
+.toc a[aria-current="location"] {
+  color: var(--accent); border-left-color: var(--accent); background: rgba(78,168,222,.06);
+}
+
+.toc-foot {
+  margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-soft);
+  font-size: 12px;
+}
+.toc-foot a { color: var(--muted); text-decoration: none; display: block; padding: 3px 0; }
+.toc-foot a:hover { color: var(--accent); }
+
+/* ── self-linking headings ── */
+.doc h2, .doc h3 { position: relative; }
+.anchor {
+  margin-left: 9px; text-decoration: none; color: var(--faint);
+  font-weight: 400; opacity: 0; transition: opacity .12s ease;
+}
+h2:hover > .anchor, h3:hover > .anchor, .anchor:focus-visible { opacity: 1; }
+.anchor:hover { color: var(--accent); }
+/* Never leave a keyboard user chasing an invisible control. */
+@media (hover: none) { .anchor { opacity: .45; } }
+
+/* ── copy button on code blocks ── */
+.pre-wrap { position: relative; margin: 14px 0; }
+.pre-wrap pre { margin: 0; }
+.copy-code {
+  position: absolute; top: 8px; right: 8px;
+  background: var(--panel-2); color: var(--muted);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font: 500 11.5px var(--sans); padding: 4px 10px; cursor: pointer;
+  opacity: 0; transition: opacity .12s ease, color .12s ease;
+}
+.pre-wrap:hover .copy-code, .copy-code:focus-visible { opacity: 1; }
+.copy-code:hover { color: var(--text); border-color: #2e3d52; }
+.copy-code.is-failed { color: var(--shift); border-color: var(--shift); }
+@media (hover: none) { .copy-code { opacity: 1; } }
+
+/* ── back to top ── */
+.to-top {
+  position: fixed; right: 20px; bottom: 20px; z-index: 30;
+  background: var(--panel-2); color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px;
+  font: 500 12px var(--sans); padding: 9px 15px; cursor: pointer;
+  box-shadow: var(--shadow);
+}
+.to-top:hover { color: var(--text); border-color: #2e3d52; }
+
+/* ── glossary ── */
+.glossary {
+  margin: 18px 0 0; display: grid; gap: 0;
+  border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
+}
+.glossary > div {
+  display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: 4px 20px;
+  padding: 13px 18px; background: var(--panel);
+}
+.glossary > div + div { border-top: 1px solid var(--line-soft); }
+.glossary dt { font-weight: 600; font-size: 13.5px; color: var(--text); }
+.glossary dd { margin: 0; font-size: 13.5px; color: #c9d4e3; line-height: 1.6; }
+.glossary dt .term-abbr { display: block; font-weight: 400; font-size: 11.5px; color: var(--faint); }
 
 .steps { list-style: none; counter-reset: step; padding: 0; margin: 18px 0 0; display: grid; gap: 12px; }
 .steps > li {
@@ -801,8 +877,29 @@ kbd {
 
 /* Four stat cards cannot fit a phone at a legible minimum, so they pair up instead of
    forcing the page wider than the viewport. */
+/* Below this the prose column would be squeezed by the rail, so the contents go back to
+   being a plain block above the text and stop sticking. */
+@media (max-width: 1080px) {
+  .doc { max-width: 860px; }
+  .doc-grid { grid-template-columns: minmax(0, 1fr); }
+  .doc-side {
+    grid-column: 1; grid-row: 1; position: static;
+    margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--line);
+  }
+  .doc-body { grid-row: 2; }
+  .toc { display: flex; flex-wrap: wrap; gap: 6px; }
+  .toc a {
+    border-left: 0; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px;
+  }
+  .toc a:hover { border-color: #2e3d52; }
+  .toc a[aria-current="location"] { border-color: var(--accent); }
+  .toc-foot { display: none; }
+}
+
 @media (max-width: 660px) {
   .counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .glossary > div { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+  .to-top { right: 12px; bottom: 12px; }
   .scene-meta dd { font-size: 11.5px; }
   .legend { gap: 6px 14px; font-size: 11px; }
   .insp-crop { width: 60px; height: 60px; }

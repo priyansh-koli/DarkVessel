@@ -35,15 +35,8 @@
       taken, and shows, for every vessel it found, what explains it or what doesn't.</p>
   </div>
 
-  <ul class="toc" aria-label="On this page">
-    <li><a href="#tour">Five-step tour</a></li>
-    <li><a href="#statuses">The four statuses</a></li>
-    <li><a href="#controls">Controls</a></li>
-    <li><a href="#shortcuts">Keyboard</a></li>
-    <li><a href="#glossary">Glossary</a></li>
-    <li><a href="#faq">FAQ</a></li>
-    <li><a href="#run">Run it yourself</a></li>
-  </ul>
+  <div class="doc-grid">
+  <div class="doc-body">
 
   <h2 id="tour">Five-step tour</h2>
   <p>Each step opens the viewer already set up to show one behaviour. The scene is a synthetic
@@ -278,11 +271,33 @@ darkvessel serve --config configs/pipeline.yaml    # live, at http://127.0.0.1:8
   <p>To publish your own static copy, <code>darkvessel render --config configs/pipeline.yaml
     --out site</code> writes a folder any static host can serve.</p>
 
+  </div><!-- /.doc-body -->
+
+  <nav class="doc-side" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    <ul class="toc">
+      <li><a href="#tour">Five-step tour</a></li>
+      <li><a href="#statuses">The four statuses</a></li>
+      <li><a href="#controls">Controls</a></li>
+      <li><a href="#shortcuts">Keyboard</a></li>
+      <li><a href="#glossary">Glossary</a></li>
+      <li><a href="#faq">FAQ</a></li>
+      <li><a href="#run">Run it yourself</a></li>
+    </ul>
+    <div class="toc-foot">
+      <a href="./">← Back to the viewer</a>
+      <a href="about.html">How it works →</a>
+    </div>
+  </nav>
+  </div><!-- /.doc-grid -->
+
   <footer class="doc-foot">
     <a href="./">← Back to the viewer</a>
     <a href="about.html">How it works →</a>
     <a href="https://github.com/priyansh-koli/DarkVessel">Source on GitHub</a>
   </footer>
 </main>
+
+<script src="docs.js"></script>
 </body>
 </html>

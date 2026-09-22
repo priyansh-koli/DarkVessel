@@ -179,8 +179,21 @@ def test_the_run_payload_is_compressed(client):
 
 
 def test_the_guide_and_how_it_works_pages_are_served(client):
-    for page in ("guide.html", "about.html", "pipeline.svg"):
+    for page in ("guide.html", "about.html", "pipeline.svg", "docs.js"):
         assert client.get(f"/{page}").status_code == 200
+
+
+def test_the_document_pages_load_their_script_and_list_their_sections(client):
+    """Both pages enhance themselves with docs.js, and every contents entry must point at a
+    heading that exists — a stale entry is a dead link in the only navigation they have."""
+    import re
+
+    for page in ("guide.html", "about.html"):
+        html = client.get(f"/{page}").text
+        assert 'src="docs.js"' in html, page
+        targets = set(re.findall(r'\sid="([^"]+)"', html))
+        for href in re.findall(r'<a href="#([^"]+)">', html):
+            assert href in targets, f"{page}: contents entry #{href} has no heading"
 
 
 def test_the_overlay_does_not_hide_its_own_focusable_detections(client):
