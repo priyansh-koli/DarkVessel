@@ -10,6 +10,8 @@ reports it dark. See the README's "How it works" for where this sits in the pipe
 from dataclasses import dataclass
 from math import cos, radians, sin
 
+import numpy as np
+
 
 @dataclass(frozen=True)
 class Geometry:
@@ -44,4 +46,29 @@ class Geometry:
             velocity_east_ms * range_east + velocity_north_ms * range_north
         ) * sin(incidence)
         shift_m = self.shift_per_mps * line_of_sight_velocity
+        return shift_m * flight_east, shift_m * flight_north
+
+    def displacements(
+        self,
+        velocity_east_ms: np.ndarray,
+        velocity_north_ms: np.ndarray,
+        latitude: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """`displacement` over whole arrays, for a whole archive in one pass.
+
+        Same formula, same flat-earth approximation, same unused `latitude` — kept in the
+        signature so the two forms cannot drift apart. Velocities that are not finite come
+        back as `nan` displacements rather than zero: an unknown velocity is not a stationary
+        one, and a zero here would silently claim the radar drew the vessel where it declared.
+        """
+        del latitude
+        heading = radians(self.heading_deg)
+        incidence = radians(self.incidence_deg)
+        flight_east, flight_north = sin(heading), cos(heading)
+        range_east, range_north = cos(heading), -sin(heading)
+
+        east = np.asarray(velocity_east_ms, dtype=float)
+        north = np.asarray(velocity_north_ms, dtype=float)
+        line_of_sight = (east * range_east + north * range_north) * sin(incidence)
+        shift_m = self.shift_per_mps * line_of_sight
         return shift_m * flight_east, shift_m * flight_north
