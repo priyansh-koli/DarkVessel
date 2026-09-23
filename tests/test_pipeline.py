@@ -13,6 +13,8 @@ from darkvessel.data.synthetic import (
     HEADING_DEG,
     INCIDENCE_DEG,
     PIXEL_SIZE_M,
+    RECEPTION_CELL_M,
+    RECEPTION_FLOOR,
     TOLERANCE_M,
     _ais,
     _by_name,
@@ -21,7 +23,14 @@ from darkvessel.data.synthetic import (
 from darkvessel.data.tiling import Tiling
 from darkvessel.detect.stub import BrightPixelDetector
 from darkvessel.fusion.azimuth import Geometry
+from darkvessel.fusion.declarations import (
+    BELOW_DETECTABLE,
+    EXPLAINED,
+    OUTSIDE_SCENE,
+    UNDETECTED,
+)
 from darkvessel.fusion.match import DARK, MATCHED, UNSEARCHED
+from darkvessel.fusion.reception import SHADOWED, coverage_for
 from darkvessel.fusion.register import STRUCTURE, Register
 from darkvessel.pipeline import run
 
@@ -33,18 +42,27 @@ _GEOMETRY = Geometry(heading_deg=HEADING_DEG, incidence_deg=INCIDENCE_DEG)
 _PIXEL_RESIDUAL_M = 2 * PIXEL_SIZE_M
 
 
-def _run(**overrides):
+def _fuse(**overrides):
+    """A run at the fixture's intended settings, both sides returned."""
+    ais = overrides.get("ais", _ais())
+    max_gap = overrides.get("max_gap", timedelta(minutes=10))
     kwargs = dict(
         scene=_scene(),
-        ais=_ais(),
+        ais=ais,
         detector=BrightPixelDetector(threshold=0.5),
         tiling=Tiling(tile_px=128, overlap_px=32),
         tolerance_m=TOLERANCE_M,
-        max_gap=timedelta(minutes=10),
+        max_gap=max_gap,
         geometry=_GEOMETRY,
+        coverage=coverage_for(ais, max_gap, cell_m=RECEPTION_CELL_M),
+        reception_floor=RECEPTION_FLOOR,
     )
     kwargs.update(overrides)
     return run(**kwargs)
+
+
+def _run(**overrides):
+    return _fuse(**overrides).detections
 
 
 def test_the_synthetic_run_reproduces_the_readme_numbers():
@@ -157,4 +175,122 @@ def test_the_tolerance_is_recorded_on_every_row():
     """A dark claim is a claim about evidence searched, so the row has to say how far it looked."""
     detections = _run()
     assert (detections["tolerance_m"] == TOLERANCE_M).all()
-    assert (detections["declarations_searched"] == 4).all()
+    assert (detections["declarations_searched"] == 8).all()
+
+
+# ───────────────────────── AIS reception ─────────────────────────
+
+
+def test_the_dark_vessel_is_dark_where_the_archive_hears_well():
+    """The point of the reception estimate: this detection's silence means something because
+    a busy lane beside it shows the archive would have placed a transmitting vessel here."""
+    detections = _run()
+    dark = detections[detections["status"] == DARK].iloc[0]
+    assert dark["reception_basis"] == "estimated"
+    assert dark["reception_p"] == pytest.approx(1.0)
+    assert dark["reception_intervals"] >= 5
+
+
+def test_a_dark_detection_in_a_reception_shadow_is_not_reported_dark():
+    """`faint_dark` stands beside a vessel heard once an hour, so the archive would have placed
+    a transmitting vessel there only a third of the time. Silence there is not evidence."""
+    detections = _fuse(detector=BrightPixelDetector(threshold=0.3)).detections
+    shadowed = detections[detections["status"] == SHADOWED]
+    assert len(shadowed) == 1
+    target = _by_name("faint_dark")
+    assert shadowed.iloc[0]["x"] == pytest.approx(target.x, abs=5.0)
+    assert shadowed.iloc[0]["reception_p"] == pytest.approx(1 / 3, abs=0.01)
+
+
+def test_no_reception_estimate_leaves_a_detection_dark_rather_than_shadowed():
+    """An absence of evidence is not evidence. `faint_trawler` sits beside neither lane, so
+    nothing measures the archive's reach there — and it stays dark, next to a shadowed row."""
+    detections = _fuse(detector=BrightPixelDetector(threshold=0.3)).detections
+    trawler = _by_name("faint_trawler")
+    near = detections[
+        (detections["x"] - trawler.x).abs().lt(10) & (detections["y"] - trawler.y).abs().lt(10)
+    ]
+    assert near.iloc[0]["status"] == DARK
+    assert near.iloc[0]["reception_basis"] == "insufficient_evidence"
+    assert pd.isna(near.iloc[0]["reception_p"])
+
+
+def test_widening_the_max_gap_lifts_the_shadow():
+    """Reception is defined against `max_gap`, so the one control moves both halves of the
+    claim: a wider gap covers the same hourly reports and the shadow lifts."""
+    tight = _fuse(detector=BrightPixelDetector(threshold=0.3))
+    wide = _fuse(detector=BrightPixelDetector(threshold=0.3), max_gap=timedelta(minutes=90))
+    assert (tight.detections["status"] == SHADOWED).sum() == 1
+    assert (wide.detections["status"] == SHADOWED).sum() == 0
+
+
+def test_a_floor_of_zero_reports_reception_without_acting_on_it():
+    """The floor is a policy. At zero, every row still carries its estimate and no status moves."""
+    detections = _fuse(detector=BrightPixelDetector(threshold=0.3), reception_floor=0.0).detections
+    assert SHADOWED not in set(detections["status"])
+    assert detections["reception_p"].notna().any()
+
+
+def test_without_an_archive_the_reception_columns_are_present_and_empty():
+    """A column's presence must never depend on whether an optional stage ran."""
+    detections = _run(ais=None, coverage=None)
+    assert {"reception_p", "reception_basis", "reception_intervals"} <= set(detections.columns)
+    assert detections["reception_p"].isna().all()
+
+
+# ───────────────────────── the declaration side ─────────────────────────
+
+
+def test_every_declaration_gets_a_verdict_against_the_radar():
+    declarations = _fuse().declarations
+    counts = declarations["status"].value_counts()
+    assert int(counts.get(EXPLAINED, 0)) == 4
+    assert int(counts.get(UNDETECTED, 0)) == 2
+    assert int(counts.get(BELOW_DETECTABLE, 0)) == 1
+    assert int(counts.get(OUTSIDE_SCENE, 0)) == 1
+
+
+def test_an_undetected_declaration_reports_how_near_the_radar_came():
+    """A status alone never says "the nearest detection was 240 m away and the bar was 200"."""
+    declarations = _fuse().declarations
+    undetected = declarations[declarations["mmsi"] == "219100001"].iloc[0]
+    assert undetected["status"] == UNDETECTED
+    assert undetected["nearest_detection_m"] > TOLERANCE_M
+    assert undetected["detection"] is pd.NA or pd.isna(undetected["detection"])
+
+
+def test_a_short_vessel_is_excused_but_one_of_unknown_length_is_not():
+    """A miss below the detector's floor says nothing about that vessel. An *unknown* length is
+    not a small one, so it stays a finding — the same rule `unsearched` follows."""
+    declarations = _fuse().declarations
+    assert declarations[declarations["mmsi"] == "219100003"].iloc[0]["status"] == BELOW_DETECTABLE
+
+    blind = _fuse(smallest_detectable_m=None).declarations
+    assert BELOW_DETECTABLE not in set(blind["status"])
+    assert int((blind["status"] == UNDETECTED).sum()) == 3
+
+
+def test_a_declaration_outside_the_image_is_not_a_finding():
+    """Nothing about it was searched: the declaration side's `unsearched`."""
+    declarations = _fuse().declarations
+    outside = declarations[declarations["mmsi"] == "219100004"].iloc[0]
+    assert outside["status"] == OUTSIDE_SCENE
+    assert not _scene().footprint.contains(outside.geometry)
+
+
+def test_the_two_sides_agree_on_one_set_of_counts():
+    """`Agreement` is derived from both frames, so it cannot drift from either."""
+    fusion = _fuse()
+    found = fusion.agreement()
+    assert found.both == int((fusion.detections["status"] == MATCHED).sum())
+    assert found.radar_only == int(
+        fusion.detections["status"].isin([DARK, SHADOWED]).sum()
+    )
+    assert found.ais_only == int((fusion.declarations["status"] == UNDETECTED).sum())
+    assert found.apparent_recall == pytest.approx(found.both / (found.both + found.ais_only))
+
+
+def test_with_no_archive_there_is_no_other_side_to_report():
+    fusion = _fuse(ais=None, coverage=None)
+    assert fusion.declarations.empty
+    assert fusion.agreement().apparent_recall is None

@@ -53,11 +53,44 @@ def test_every_target_blob_sits_at_its_declared_ground_position():
 
 
 def test_the_dark_vessel_declares_nothing_of_its_own():
-    """No AIS row belongs to the dark target: at the default max gap, the declared MMSIs are
-    exactly the other four stories. The two extra vessels only report too long ago."""
+    """No AIS row belongs to the dark target. Of the story vessels, the default max gap
+    declares exactly the other four; the two stale ones report too long ago. The `2191*`
+    vessels exist only in the AIS and carry the declaration side's four verdicts."""
     declared = positions_at(_ais(), ACQUIRED_AT, timedelta(minutes=10))
-    assert set(declared["mmsi"]) == {"219000001", "219000002", "219000003", "219000004"}
-    assert set(_ais()["mmsi"]) == {f"21900000{i}" for i in range(1, 7)}
+    stories = {m for m in declared["mmsi"] if m.startswith("21900")}
+    assert stories == {"219000001", "219000002", "219000003", "219000004"}
+    assert set(_ais()["mmsi"]) == {f"21900000{i}" for i in range(1, 7)} | {
+        f"21910000{i}" for i in range(1, 5)
+    }
+
+
+def test_the_two_lanes_give_the_reception_estimate_something_to_measure():
+    """One lane reports every two minutes, the other once an hour. Without that contrast every
+    cell would come back `insufficient_evidence` and the reception control would be inert."""
+    ais = _ais()
+    gaps = {}
+    for mmsi in ("219100001", "219100002"):
+        times = sorted(ais[ais["mmsi"] == mmsi]["timestamp"])
+        gaps[mmsi] = [(b - a).total_seconds() for a, b in zip(times, times[1:])]
+
+    assert len(gaps["219100001"]) >= 5, "too few intervals to clear the evidence floor"
+    assert max(gaps["219100001"]) <= 2 * 600, "the busy lane must be fully covered at a 10 min gap"
+
+    assert len(gaps["219100002"]) >= 5
+    assert min(gaps["219100002"]) > 2 * 600, "the quiet lane must be a shadow at a 10 min gap"
+
+
+def test_the_ais_only_vessels_keep_clear_of_every_target():
+    """They exist to be *undetected*, so none of them may sit inside the default tolerance of a
+    painted target — otherwise one would match and quietly become a fifth story."""
+    declared = positions_at(_ais(), ACQUIRED_AT, timedelta(minutes=10))
+    for _, row in declared.iterrows():
+        if not str(row["mmsi"]).startswith("2191"):
+            continue
+        nearest = min(
+            np.hypot(target.x - row.geometry.x, target.y - row.geometry.y) for target in _TARGETS
+        )
+        assert nearest > TOLERANCE_M, f"{row['mmsi']} is within tolerance of a target"
 
 
 def test_the_extra_targets_are_below_the_default_threshold():

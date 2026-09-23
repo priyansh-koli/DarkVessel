@@ -32,6 +32,28 @@ stories, arranged so that none of it shows at the default settings:
     vessel — which is the trap a long max gap sets;
   - the plain matches sit 140 m and 70 m from their detections, so tightening the tolerance
     below those distances turns them dark.
+
+Four more vessels exist only in the AIS, and carry the two questions the radar side cannot
+answer on its own:
+  - `219100001` runs a lane 245 m east of `dark_vessel`, reporting every two minutes. Nothing
+    in the radar stands where its 90 m hull declares itself, so it comes back **undetected** —
+    the mirror of a dark vessel — and its dense reporting is what tells the reception estimate
+    that the archive hears this water well, which is what keeps `dark_vessel`'s darkness
+    meaning something.
+  - `219100002` drifts beside `faint_dark`, heard once an hour and never within the default
+    max gap. Its neighbourhood's reception comes out at 1/3, so once the threshold is lowered
+    far enough to detect `faint_dark`, that detection is reported **shadowed** rather than
+    dark: the search could not have heard a vessel there, so its silence is not evidence.
+    Widen the max gap past the hour and the same reports cover the instant, reception rises to
+    1, and the shadow lifts — the one control moving both halves of the claim at once.
+  - `219100003` is 12 m long, under the detector's floor, so its absence from the radar is
+    expected and it is reported **below_detectable** rather than as a finding.
+  - `219100004` declares itself outside the image, so nothing about it was searched at all:
+    **outside_scene**, the declaration side's `unsearched`.
+
+`faint_trawler` sits beside neither lane, so at a lowered threshold it is reported dark with
+no reception estimate behind it — `insufficient_evidence`, next to `faint_dark`'s measured
+shadow. The two look alike and are not: one search came back empty, the other never reached.
 """
 
 from __future__ import annotations
@@ -58,6 +80,12 @@ ACQUIRED_AT = datetime(2026, 8, 9, 5, 31, 24, tzinfo=timezone.utc)
 HEADING_DEG = 350.0
 INCIDENCE_DEG = 35.0
 TOLERANCE_M = 200.0
+
+# The fixture's intended reception settings. A 200 m cell pools evidence over the 600 m
+# neighbourhood around it, which is the right scale for a scene 1600 m across; a real
+# Sentinel-1 scene is hundreds of times wider and wants `reception.RECEPTION_CELL_M`.
+RECEPTION_CELL_M = 200.0
+RECEPTION_FLOOR = 0.5
 
 TRANSFORM = Affine(PIXEL_SIZE_M, 0.0, ORIGIN[0], 0.0, -PIXEL_SIZE_M, ORIGIN[1])
 
@@ -205,6 +233,53 @@ def _ais_rows() -> list[dict]:
 
     # "dark_vessel" gets no AIS row at all — nothing declares it, so it stays dark.
 
+    # A busy lane 245 m east of the dark vessel, reporting every two minutes for twenty
+    # minutes either side of the pass. It runs along the flight direction, so its own azimuth
+    # shift is zero and the 245 m gap does not depend on whether the correction is applied.
+    # Two jobs: nothing is detected where it declares, so it is the `undetected` story; and
+    # its dense reporting is the evidence that the archive hears this water well.
+    rows.extend(
+        _lane(
+            mmsi="219100001",
+            length_m=90.0,
+            centre=Point(501180.0, 6099900.0),
+            speed_ms=0.5,
+            offsets_minutes=[m for m in range(-20, 21, 2)],
+        )
+    )
+
+    # A drifter beside the faint dark target, heard once an hour and never within the default
+    # max gap. Its hourly gaps are what put that neighbourhood's reception at 1/3.
+    rows.extend(
+        _lane(
+            mmsi="219100002",
+            length_m=30.0,
+            centre=Point(500520.0, 6099700.0),
+            speed_ms=0.005,
+            offsets_minutes=[-270, -210, -150, -90, -30, 30, 90, 150, 210, 270],
+        )
+    )
+
+    # 12 m, under the detector's floor: a miss here says nothing about this vessel.
+    rows.append(
+        dict(
+            mmsi="219100003",
+            timestamp=ACQUIRED_AT,
+            length_m=12.0,
+            geometry=Point(500500.0, 6100500.0),
+        )
+    )
+
+    # Declared 300 m east of the image edge: outside the scene, so nothing was searched.
+    rows.append(
+        dict(
+            mmsi="219100004",
+            timestamp=ACQUIRED_AT,
+            length_m=60.0,
+            geometry=Point(501800.0, 6100300.0),
+        )
+    )
+
     # Stale reports, both beyond the default max gap. The trawler's lone report is 14 minutes
     # old and 60 m from it; the sixth vessel last reported 25 minutes before the pass, 320 m
     # from the dark vessel — close enough to "explain" it once both gap and tolerance are
@@ -228,6 +303,34 @@ def _ais_rows() -> list[dict]:
         )
     )
     return rows
+
+
+def _lane(
+    mmsi: str,
+    length_m: float,
+    centre: Point,
+    speed_ms: float,
+    offsets_minutes: list[float],
+) -> list[dict]:
+    """One vessel running along the satellite's ground track, reporting at these offsets.
+
+    Along the flight direction on purpose: the line-of-sight component of that velocity is
+    zero, so the azimuth correction moves the vessel nowhere and its distance from everything
+    else in the scene is the same whether the correction is on or off.
+    """
+    flight_east, flight_north = _flight_direction()
+    return [
+        dict(
+            mmsi=mmsi,
+            timestamp=ACQUIRED_AT + timedelta(minutes=offset),
+            length_m=length_m,
+            geometry=Point(
+                centre.x + speed_ms * offset * 60.0 * flight_east,
+                centre.y + speed_ms * offset * 60.0 * flight_north,
+            ),
+        )
+        for offset in offsets_minutes
+    ]
 
 
 def _ais() -> gpd.GeoDataFrame:

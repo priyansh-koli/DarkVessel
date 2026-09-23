@@ -17,7 +17,13 @@ from darkvessel.data.scene import read_scene
 from darkvessel.data.synthetic import write_synthetic
 from darkvessel.data.tiling import Tiling
 from darkvessel.detect.factory import make_detector
+from darkvessel.fusion.declarations import (
+    BELOW_DETECTABLE,
+    OUTSIDE_SCENE,
+    UNDETECTED,
+)
 from darkvessel.fusion.match import DARK, MATCHED
+from darkvessel.fusion.reception import SHADOWED, coverage_for
 from darkvessel.fusion.register import STRUCTURE
 from darkvessel.pipeline import run as run_pipeline
 
@@ -149,7 +155,13 @@ def _run(config_path: Path) -> int:
     tiling = Tiling(tile_px=cfg.tile_px, overlap_px=cfg.overlap_px)
     detector = make_detector(cfg.detector, cfg.detector_threshold, cfg.detector_weights)
 
-    detections = run_pipeline(
+    # Reception is estimated from the same cleaned archive the match searches, so the number
+    # beside a dark claim describes the search that made it.
+    coverage = coverage_for(
+        ais, cfg.max_gap, cell_m=cfg.reception_cell_m, min_intervals=cfg.reception_min_intervals
+    )
+
+    fusion = run_pipeline(
         scene=scene,
         ais=ais,
         detector=detector,
@@ -157,21 +169,40 @@ def _run(config_path: Path) -> int:
         tolerance_m=cfg.tolerance_m,
         max_gap=cfg.max_gap,
         geometry=cfg.geometry,
+        coverage=coverage,
+        reception_floor=cfg.reception_floor,
+        smallest_detectable_m=cfg.smallest_detectable_m,
     )
+    detections, declarations = fusion.detections, fusion.declarations
 
+    # Two layers in one file: a run has two answers and splitting them across two files is how
+    # they come to be read apart, or one of them not read at all.
     cfg.output_path.parent.mkdir(parents=True, exist_ok=True)
-    detections.to_file(cfg.output_path, driver="GPKG")
+    detections.to_file(cfg.output_path, driver="GPKG", layer="detections")
+    declarations.to_file(cfg.output_path, driver="GPKG", layer="declarations")
 
     counts = detections["status"].value_counts()
     matched = int(counts.get(MATCHED, 0))
     dark = int(counts.get(DARK, 0))
+    shadowed = int(counts.get(SHADOWED, 0))
     structure = int(counts.get(STRUCTURE, 0))
 
     print(f"{len(detections)} detections in {detections.crs} -> {cfg.output_path}")
     print(
-        f"  {matched} matched, {dark} dark, {structure} at a fixed structure, "
-        f"at a tolerance of {cfg.tolerance_m:g} m"
+        f"  {matched} matched, {dark} dark, {shadowed} in an AIS reception shadow, "
+        f"{structure} at a fixed structure, at a tolerance of {cfg.tolerance_m:g} m"
     )
+
+    declared = declarations["status"].value_counts()
+    print(f"{len(declarations)} declarations searched against the radar")
+    print(
+        f"  {int(declared.get(UNDETECTED, 0))} undetected, "
+        f"{int(declared.get(BELOW_DETECTABLE, 0))} below the detector's floor, "
+        f"{int(declared.get(OUTSIDE_SCENE, 0))} outside the scene"
+    )
+    print(f"  {fusion.agreement().line()}")
+    if coverage is not None:
+        print(f"  {coverage.report.line()}")
     return 0
 
 
@@ -206,7 +237,13 @@ def _render(config_path: Path, out_dir: Path) -> int:
     scene = read_scene(cfg.scene_dir)
     ais = gpd.read_file(cfg.ais_path) if cfg.ais_path else None
 
-    viewer = Viewer(scene, ais)
+    viewer = Viewer(
+        scene,
+        ais,
+        reception_cell_m=cfg.reception_cell_m,
+        reception_min_intervals=cfg.reception_min_intervals,
+        smallest_detectable_m=cfg.smallest_detectable_m,
+    )
     default = RunRequest(
         tolerance_m=cfg.tolerance_m,
         max_gap_minutes=cfg.max_gap.total_seconds() / 60,
@@ -215,6 +252,7 @@ def _render(config_path: Path, out_dir: Path) -> int:
         tile_px=cfg.tile_px,
         overlap_px=cfg.overlap_px,
         apply_azimuth=cfg.geometry is not None,
+        reception_floor=cfg.reception_floor,
     )
     payload = viewer.run(default)
 
@@ -231,10 +269,15 @@ def _render(config_path: Path, out_dir: Path) -> int:
     (out_dir / "data" / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")))
 
     counts = payload["counts"]
+    declared = payload["declaration_counts"]
     print(f"static viewer written to {out_dir}")
     print(
         f"  {counts['total']} detections · {counts['matched']} matched, {counts['dark']} dark, "
-        f"{counts['structure']} at a fixed structure"
+        f"{counts['shadowed']} shadowed, {counts['structure']} at a fixed structure"
+    )
+    print(
+        f"  {declared['total']} declarations · {declared['explained']} explained, "
+        f"{declared['undetected']} undetected"
     )
     print(
         f"  {len(manifest['runs'])} control positions baked into "

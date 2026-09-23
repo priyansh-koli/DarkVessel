@@ -6,6 +6,23 @@ tile_px: 128
 overlap_px: 32
 detector_threshold: 0.5
 output_path: outputs/detections.gpkg
+
+# How well the AIS archive has to reach a place before its silence there counts as evidence.
+# `reception_cell_m` sets the grid reception is estimated on; evidence is pooled over a cell
+# and the eight around it, so it smooths over three times this. 200 m suits the 1.6 km
+# synthetic scene — a real Sentinel-1 scene wants 1000 or more.
+# `reception_floor` is a policy, not a measurement: below it a dark detection is reported
+# `shadowed` instead, because the search could not have heard a vessel there. 0 reports
+# reception on every row and reclassifies nothing.
+reception_cell_m: 200
+reception_floor: 0.5
+reception_min_intervals: 5
+
+# The shortest vessel the detector is trusted to find. A declaration below it that the radar
+# missed is reported `below_detectable` rather than as a finding. Set it from the detector's
+# own benchmark; `null` turns the check off.
+smallest_detectable_m: 20
+
 geometry:
   heading_deg: 350.0
   incidence_deg: 35.0

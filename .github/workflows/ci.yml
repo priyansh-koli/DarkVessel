@@ -27,4 +27,6 @@ jobs:
         run: |
           darkvessel synthesise --out data/synthetic
           darkvessel run --config configs/pipeline.yaml | tee run.txt
-          grep -q "4 matched, 1 dark, 0 at a fixed structure" run.txt
+          grep -q "4 matched, 1 dark, 0 in an AIS reception shadow, 0 at a fixed structure" run.txt
+          grep -q "2 undetected, 1 below the detector's floor, 1 outside the scene" run.txt
+          grep -q "radar and AIS agree on 4 of 6" run.txt

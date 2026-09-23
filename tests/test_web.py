@@ -9,14 +9,31 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from darkvessel.data.synthetic import TOLERANCE_M, _ais, _scene
+from darkvessel.data.synthetic import (
+    RECEPTION_CELL_M,
+    RECEPTION_FLOOR,
+    TOLERANCE_M,
+    _ais,
+    _scene,
+)
 from darkvessel.web.app import create_app
 from darkvessel.web.payload import RunRequest, Viewer, build
 
 
+def _viewer(ais=None):
+    """A viewer at the fixture's intended reception settings — see `data.synthetic`."""
+    return Viewer(_scene(), _ais() if ais is None else ais, reception_cell_m=RECEPTION_CELL_M)
+
+
+def _request(**values):
+    values.setdefault("tolerance_m", TOLERANCE_M)
+    values.setdefault("reception_floor", RECEPTION_FLOOR)
+    return RunRequest(**values)
+
+
 @pytest.fixture(scope="module")
 def payload():
-    return build(_scene(), _ais(), RunRequest(tolerance_m=TOLERANCE_M))
+    return _viewer().run(_request())
 
 
 @pytest.fixture(scope="module")
@@ -31,6 +48,7 @@ def client(tmp_path_factory):
         f"scene_dir: {root / 'synthetic' / 'scene'}\n"
         f"ais_path: {root / 'synthetic' / 'ais.gpkg'}\n"
         "tolerance_m: 200\nmax_gap_minutes: 10\n"
+        "reception_cell_m: 200\nreception_floor: 0.5\nsmallest_detectable_m: 20\n"
         "geometry:\n  heading_deg: 350.0\n  incidence_deg: 35.0\n"
     )
     return TestClient(create_app(config))
@@ -38,7 +56,7 @@ def client(tmp_path_factory):
 
 def test_the_payload_reproduces_the_readme_counts(payload):
     assert payload["counts"] == {
-        "total": 5, "matched": 4, "dark": 1, "structure": 0, "unsearched": 0
+        "total": 5, "matched": 4, "dark": 1, "shadowed": 0, "structure": 0, "unsearched": 0
     }
 
 
@@ -78,7 +96,7 @@ def test_a_stationary_declaration_is_drawn_where_it_declared(payload):
 
 
 def test_turning_off_the_correction_reports_the_fast_vessel_dark():
-    off = build(_scene(), _ais(), RunRequest(tolerance_m=TOLERANCE_M, apply_azimuth=False))
+    off = _viewer().run(_request(apply_azimuth=False))
     assert off["counts"]["matched"] == 3
     assert off["counts"]["dark"] == 2
 
@@ -87,19 +105,15 @@ def test_registering_the_dark_position_reclassifies_it():
     from darkvessel.data.synthetic import _by_name
 
     dark = _by_name("dark_vessel")
-    marked = build(
-        _scene(),
-        _ais(),
-        RunRequest(tolerance_m=TOLERANCE_M, register_xy=[(dark.x, dark.y)]),
-    )
+    marked = _viewer().run(_request(register_xy=[(dark.x, dark.y)]))
     assert marked["counts"]["structure"] == 1
     assert marked["counts"]["dark"] == 0
     assert marked["counts"]["matched"] == 4  # matches are never overridden
 
 
 def test_the_ais_summary_reports_the_cleaning_rules(payload):
-    assert payload["ais"]["rows_in"] == 8
-    assert payload["ais"]["vessels"] == 6
+    assert payload["ais"]["rows_in"] == 41
+    assert payload["ais"]["vessels"] == 10
     assert "duplicate_mmsi_timestamp" in payload["ais"]["removed"]
 
 
@@ -108,6 +122,11 @@ def test_no_ais_means_unsearched_and_no_declarations():
     assert nothing["counts"]["unsearched"] == 5
     assert nothing["declarations"] == []
     assert nothing["ais"] is None
+    # There is nothing to estimate reception from either, and the payload says so rather
+    # than shipping an empty model that would read as "heard nowhere".
+    assert nothing["reception"] is None
+    assert nothing["declaration_counts"]["total"] == 0
+    assert nothing["agreement"]["apparent_recall"] is None
 
 
 def test_the_scene_transform_is_shipped_for_the_viewer(payload):
@@ -135,8 +154,13 @@ def test_the_scene_png_is_served(client):
 
 
 def test_run_honours_the_tolerance_query(client):
-    """At 5 m every declaration falls outside tolerance, so everything reads dark."""
-    assert client.get("/api/run", params={"tolerance_m": 5}).json()["counts"]["dark"] == 5
+    """At 5 m every declaration falls outside tolerance, so nothing is explained. Four of the
+    five read dark; the fifth stands where the archive is heard a third of the time, so this
+    configuration's floor reports it shadowed instead. Both are unexplained by AIS — which is
+    what the tolerance moved — and the split between them is the reception claim, not this one."""
+    tight = client.get("/api/run", params={"tolerance_m": 5}).json()["counts"]
+    assert tight["matched"] == 0
+    assert tight["dark"] + tight["shadowed"] == 5
     assert client.get("/api/run", params={"tolerance_m": 200}).json()["counts"]["matched"] == 4
 
 
@@ -218,9 +242,9 @@ def test_the_page_does_not_make_itself_a_scroll_container(client):
 
 
 def test_a_held_viewer_gives_the_same_payload_as_a_one_off_build(payload):
-    viewer = Viewer(_scene(), _ais())
-    viewer.run(RunRequest(tolerance_m=5))  # warm the caches with a different request
-    assert viewer.run(RunRequest(tolerance_m=TOLERANCE_M)) == payload
+    viewer = _viewer()
+    viewer.run(_request(tolerance_m=5))  # warm the caches with a different request
+    assert viewer.run(_request()) == payload
 
 
 def test_detection_runs_once_per_detector_setting(monkeypatch):
@@ -232,11 +256,29 @@ def test_detection_runs_once_per_detector_setting(monkeypatch):
     monkeypatch.setattr(
         payload_module, "detect_scene", lambda *a, **k: calls.append(1) or real(*a, **k)
     )
-    viewer = Viewer(_scene(), _ais())
+    viewer = _viewer()
     for tolerance in (50, 100, 200):
         for azimuth in (True, False):
             viewer.run(RunRequest(tolerance_m=tolerance, apply_azimuth=azimuth))
     assert len(calls) == 1
+
+
+def test_reception_is_estimated_once_per_max_gap(monkeypatch):
+    """It depends on the archive and the gap alone, so moving the tolerance must not rebuild
+    it — the whole reason `fuse` takes a pre-built model."""
+    import darkvessel.web.payload as payload_module
+
+    calls = []
+    real = payload_module.coverage_for
+    monkeypatch.setattr(
+        payload_module, "coverage_for", lambda *a, **k: calls.append(1) or real(*a, **k)
+    )
+    viewer = _viewer()
+    for tolerance in (50, 100, 200):
+        for floor in (0.0, 0.5):
+            viewer.run(_request(tolerance_m=tolerance, reception_floor=floor))
+    viewer.run(_request(max_gap_minutes=90))
+    assert len(calls) == 2  # one per distinct max gap, not one per run
 
 
 def test_the_archive_is_cleaned_before_it_is_matched():
@@ -272,8 +314,8 @@ def baked(tmp_path_factory):
     from darkvessel.web.bake import bake
 
     out = tmp_path_factory.mktemp("bake")
-    default = RunRequest(tolerance_m=TOLERANCE_M)
-    viewer = Viewer(_scene(), _ais())
+    default = _request()
+    viewer = _viewer()
     return viewer, default, bake(viewer, default, out), out
 
 
@@ -309,10 +351,32 @@ def test_a_baked_run_is_exactly_the_live_run(baked, values):
     """Shared equivalence classes must never change an answer, only save the work."""
     from dataclasses import replace
 
-    viewer, default, _, _ = baked
+    viewer, default, manifest, out = baked
     live = viewer.run(replace(default, **values))
     live.pop("config")
+    # The reception model is written once per max-gap class rather than copied into every run
+    # that shares one, so it is compared from its own file.
+    reception = live.pop("reception")
     assert _baked_run(baked, **values) == json.loads(json.dumps(live))
+
+    gap = values.get("max_gap_minutes", manifest["defaults"]["max_gap_minutes"])
+    at = manifest["grid"]["max_gap_minutes"].index(gap)
+    hoisted = json.loads((out / "reception" / f"{manifest['reception'][at]}.json").read_text())
+    assert hoisted == json.loads(json.dumps(reception))
+
+
+def test_the_reception_model_is_baked_once_per_max_gap(baked):
+    """Two gaps that declare the same vessels can still disagree about reception, so the gap
+    equivalence class has to account for both — otherwise a static build would serve one
+    gap's answer to the other's question."""
+    _, _, manifest, out = baked
+    gaps = manifest["grid"]["max_gap_minutes"]
+    # One entry per gap, positionally: the frontend looks it up by index, because a gap of
+    # 10.0 reaches JavaScript as the number 10 and would never match the key "10.0".
+    assert len(manifest["reception"]) == len(gaps)
+    ids = set(manifest["reception"])
+    assert len(ids) > 1, "reception must move with the max gap"
+    assert len(ids) == len(list((out / "reception").glob("*.json")))
 
 
 def test_the_bake_reproduces_the_azimuth_story(baked):
@@ -333,14 +397,76 @@ def test_declarations_carry_course_and_speed_for_the_radar_view(payload):
 def test_every_fusion_and_detector_control_changes_the_result():
     """The fixture is built so that no viewer control is inert: each one, moved away from its
     default, changes the counts."""
-    viewer = Viewer(_scene(), _ais())
-    default = viewer.run(RunRequest())["counts"]
+    viewer = _viewer()
+    default = viewer.run(_request())["counts"]
     for changed in (
-        RunRequest(tolerance_m=100),
-        RunRequest(detector_threshold=0.3),
-        RunRequest(detector_threshold=0.7),
-        RunRequest(max_gap_minutes=30, tolerance_m=350),
+        _request(tolerance_m=100),
+        _request(detector_threshold=0.3),
+        _request(detector_threshold=0.7),
+        _request(max_gap_minutes=30, tolerance_m=350),
     ):
         assert viewer.run(changed)["counts"] != default, changed
-    stale_gap = viewer.run(RunRequest(detector_threshold=0.3, max_gap_minutes=15))["counts"]
-    assert stale_gap != viewer.run(RunRequest(detector_threshold=0.3))["counts"]
+    stale_gap = viewer.run(_request(detector_threshold=0.3, max_gap_minutes=15))["counts"]
+    assert stale_gap != viewer.run(_request(detector_threshold=0.3))["counts"]
+
+
+# ───────────────────────── reception and the other side ─────────────────────────
+
+
+def test_every_detection_carries_its_reception_estimate(payload):
+    for detection in payload["detections"]:
+        assert "reception_p" in detection
+        assert detection["reception_basis"] in ("estimated", "insufficient_evidence")
+
+
+def test_the_reception_model_ships_cells_the_viewer_can_draw(payload):
+    reception = payload["reception"]
+    assert reception["cell_m"] == RECEPTION_CELL_M
+    assert reception["floor"] == RECEPTION_FLOOR
+    assert reception["cells"], "nothing to draw"
+    scene = payload["scene"]
+    for cell in reception["cells"]:
+        # Clipped to the scene: a cell nobody can see is payload nobody needs.
+        assert cell["px"] < scene["width"] and cell["px"] + cell["pw"] > 0
+        assert cell["py"] < scene["height"] and cell["py"] + cell["ph"] > 0
+
+
+def test_raising_the_floor_moves_dark_detections_into_the_shadow():
+    viewer = _viewer()
+    at_zero = viewer.run(_request(detector_threshold=0.3, reception_floor=0.0))["counts"]
+    at_half = viewer.run(_request(detector_threshold=0.3, reception_floor=0.5))["counts"]
+    assert at_zero["shadowed"] == 0
+    assert at_half["shadowed"] == 1
+    assert at_zero["dark"] == at_half["dark"] + at_half["shadowed"]
+
+
+def test_the_declaration_side_is_counted_and_listed(payload):
+    assert payload["declaration_counts"] == {
+        "total": 8,
+        "explained": 4,
+        "undetected": 2,
+        "below_detectable": 1,
+        "outside_scene": 1,
+    }
+    undetected = [d for d in payload["declarations"] if d["status"] == "undetected"]
+    assert {d["mmsi"] for d in undetected} == {"219100001", "219100002"}
+    assert all(d["nearest_detection_m"] > TOLERANCE_M for d in undetected)
+
+
+def test_the_agreement_gives_a_recall_estimate_without_labels(payload):
+    agreement = payload["agreement"]
+    assert agreement["both"] == 4
+    assert agreement["ais_only"] == 2
+    assert agreement["apparent_recall"] == pytest.approx(4 / 6)
+    assert "apparent recall" in agreement["line"]
+
+
+def test_run_honours_the_reception_floor_query(client):
+    low = client.get("/api/run", params={"detector_threshold": 0.3, "reception_floor": 0}).json()
+    high = client.get("/api/run", params={"detector_threshold": 0.3, "reception_floor": 1}).json()
+    assert low["counts"]["shadowed"] == 0
+    assert high["counts"]["shadowed"] > 0
+
+
+def test_an_out_of_range_reception_floor_is_refused(client):
+    assert client.get("/api/run", params={"reception_floor": 1.5}).status_code == 422

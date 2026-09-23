@@ -9,6 +9,8 @@ from pathlib import Path
 import yaml
 
 from darkvessel.fusion.azimuth import Geometry
+from darkvessel.fusion.declarations import SMALLEST_DETECTABLE_M
+from darkvessel.fusion.reception import MIN_INTERVALS, RECEPTION_CELL_M, RECEPTION_FLOOR
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,15 @@ class RunConfig:
     geometry: Geometry | None
     detector: str = "stub"
     detector_weights: Path | None = None
+    # Reception, and the bar a dark claim has to clear. `reception_floor` is a policy, not a
+    # measurement: it says how well the archive must reach a place before its silence there
+    # counts as evidence. Zero reports reception without ever acting on it.
+    reception_cell_m: float = RECEPTION_CELL_M
+    reception_floor: float = RECEPTION_FLOOR
+    reception_min_intervals: int = MIN_INTERVALS
+    # The shortest vessel this detector is trusted to find. `None` turns the check off, and
+    # then no declaration is ever excused as too small to expect.
+    smallest_detectable_m: float | None = SMALLEST_DETECTABLE_M
 
 
 def load(path: str | Path) -> RunConfig:
@@ -59,4 +70,14 @@ def load(path: str | Path) -> RunConfig:
         geometry=geometry,
         detector=str(raw.get("detector", "stub")),
         detector_weights=Path(raw["detector_weights"]) if raw.get("detector_weights") else None,
+        reception_cell_m=float(raw.get("reception_cell_m", RECEPTION_CELL_M)),
+        reception_floor=float(raw.get("reception_floor", RECEPTION_FLOOR)),
+        reception_min_intervals=int(raw.get("reception_min_intervals", MIN_INTERVALS)),
+        # Written out rather than `raw.get(...) or default`, so an explicit `null` turns the
+        # check off instead of quietly restoring the default.
+        smallest_detectable_m=(
+            None
+            if "smallest_detectable_m" in raw and raw["smallest_detectable_m"] is None
+            else float(raw.get("smallest_detectable_m", SMALLEST_DETECTABLE_M))
+        ),
     )

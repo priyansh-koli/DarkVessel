@@ -28,7 +28,13 @@ def create_app(config_path: str | Path) -> FastAPI:
     cfg = config_module.load(config_path)
     scene = read_scene(cfg.scene_dir)
     ais = gpd.read_file(cfg.ais_path) if cfg.ais_path else None
-    viewer = Viewer(scene, ais)
+    viewer = Viewer(
+        scene,
+        ais,
+        reception_cell_m=cfg.reception_cell_m,
+        reception_min_intervals=cfg.reception_min_intervals,
+        smallest_detectable_m=cfg.smallest_detectable_m,
+    )
     png = scene_png(scene.image)
 
     app = FastAPI(title="darkvessel", docs_url="/api/docs", openapi_url="/api/openapi.json")
@@ -42,6 +48,7 @@ def create_app(config_path: str | Path) -> FastAPI:
         "detector_threshold": cfg.detector_threshold if cfg.detector == "stub" else 0.5,
         "apply_azimuth": cfg.geometry is not None,
         "register_tolerance_m": SAME_POSITION_M,
+        "reception_floor": cfg.reception_floor,
     }
 
     @app.get("/api/health")
@@ -66,6 +73,7 @@ def create_app(config_path: str | Path) -> FastAPI:
         apply_azimuth: bool = Query(cfg.geometry is not None),
         register: list[str] = Query(default=[]),
         register_tolerance_m: float = Query(defaults["register_tolerance_m"], ge=1.0, le=5000.0),
+        reception_floor: float = Query(cfg.reception_floor, ge=0.0, le=1.0),
     ) -> dict:
         return viewer.run(
             RunRequest(
@@ -77,6 +85,7 @@ def create_app(config_path: str | Path) -> FastAPI:
                 apply_azimuth=apply_azimuth,
                 register_xy=_parse_register(register),
                 register_tolerance_m=register_tolerance_m,
+                reception_floor=reception_floor,
             ),
         )
 
