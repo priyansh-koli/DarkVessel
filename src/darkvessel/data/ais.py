@@ -14,7 +14,9 @@ import geopandas as gpd
 
 from darkvessel.data.study_area import StudyArea
 
-_MAX_PLAUSIBLE_SPEED_MS = 25.7  # ~50 knots; faster than any merchant or fishing vessel
+# ~50 knots; faster than any merchant or fishing vessel. Public because `fusion.reception`
+# applies the same cap to the speed a pair of reports *implies*, and the two must not drift.
+MAX_PLAUSIBLE_SPEED_MS = 25.7
 
 
 @dataclass(frozen=True)
@@ -50,7 +52,7 @@ def clean(
     if "speed_ms" in working.columns:
         before = len(working)
         working = working[
-            working["speed_ms"].isna() | (working["speed_ms"] <= _MAX_PLAUSIBLE_SPEED_MS)
+            working["speed_ms"].isna() | (working["speed_ms"] <= MAX_PLAUSIBLE_SPEED_MS)
         ]
         removed["implausible_speed"] = before - len(working)
 
