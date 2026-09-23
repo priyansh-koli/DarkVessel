@@ -9,6 +9,7 @@ from datetime import timedelta
 
 import geopandas as gpd
 import pandas as pd
+import pytest
 from shapely import Point
 
 from darkvessel.fusion.match import DARK, MATCHED, UNSEARCHED, _optimal_pairs, classify
@@ -62,7 +63,7 @@ def test_classify_marks_unsearched_when_ais_is_none():
         pd.Timestamp("2026-08-09T05:31:24Z"),
         tolerance_m=100.0,
         max_gap=timedelta(minutes=10),
-    )
+    ).detections
     assert result["status"].tolist() == [UNSEARCHED]
     assert result["declarations_searched"].isna().all()
 
@@ -78,7 +79,7 @@ def test_classify_marks_dark_when_ais_search_finds_nothing():
         pd.Timestamp("2026-08-09T05:31:24Z"),
         tolerance_m=100.0,
         max_gap=timedelta(minutes=10),
-    )
+    ).detections
     assert result["status"].tolist() == [DARK]
     assert result["declarations_searched"].tolist() == [0.0]
 
@@ -95,9 +96,61 @@ def test_classify_matches_within_tolerance():
         geometry=[Point(50, 0)],
         crs="EPSG:25832",
     )
-    result = classify(
+    matched = classify(
         detections, ais, acquisition, tolerance_m=100.0, max_gap=timedelta(minutes=10)
     )
-    assert result["status"].tolist() == [MATCHED]
-    assert result["mmsi"].tolist() == ["219000001"]
-    assert result["match_distance_m"].tolist() == [50.0]
+    assert matched.detections["status"].tolist() == [MATCHED]
+    assert matched.detections["mmsi"].tolist() == ["219000001"]
+    assert matched.detections["match_distance_m"].tolist() == [50.0]
+
+    # Both sides of one assignment: the declaration knows which detection it explained.
+    assert matched.declared["detection"].tolist() == [0]
+    assert matched.declared["match_distance_m"].tolist() == [50.0]
+
+
+def test_the_component_split_gives_the_dense_solution_exactly():
+    """The matcher splits the feasibility graph into components and solves each alone. That is
+    an optimisation, so it has to be indistinguishable from solving the whole matrix at once —
+    checked here against a dense `linear_sum_assignment` over random point clouds."""
+    import numpy as np
+    from scipy.optimize import linear_sum_assignment
+
+    from darkvessel.fusion.match import _INFEASIBLE_PENALTY
+
+    rng = np.random.default_rng(0)
+    for trial in range(25):
+        tolerance = 60.0
+        # Clustered, not uniform: uniform points give one giant component and never exercise
+        # the split. Shipping lanes cluster, which is the case that matters.
+        centres = rng.uniform(0, 4000, size=(6, 2))
+        detections = _points(
+            [tuple(centres[i % 6] + rng.normal(0, 40, 2)) for i in range(18)]
+        )
+        declared = _points([tuple(centres[i % 6] + rng.normal(0, 40, 2)) for i in range(15)])
+
+        here = np.array([[p.x, p.y] for p in detections.geometry])
+        there = np.array([[p.x, p.y] for p in declared.geometry])
+        distances = np.hypot(
+            here[:, 0, None] - there[None, :, 0], here[:, 1, None] - there[None, :, 1]
+        )
+        cost = np.where(distances <= tolerance, distances, _INFEASIBLE_PENALTY)
+        rows, cols = linear_sum_assignment(cost)
+        dense = {
+            (int(r), int(c)) for r, c in zip(rows, cols) if distances[r, c] <= tolerance
+        }
+
+        split = {(d, a) for d, a, _ in _optimal_pairs(detections, declared, tolerance)}
+        assert len(split) == len(dense), f"trial {trial}: different number of matches"
+        assert sum(distances[d, a] for d, a in split) == pytest.approx(
+            sum(distances[d, a] for d, a in dense)
+        ), f"trial {trial}: same count but a more expensive assignment"
+
+
+def test_an_unreachable_detection_never_enters_a_cost_matrix():
+    """A detection with no declaration within tolerance cannot be matched, so it is dropped
+    before the assignment rather than padded into it — which is what keeps a scene of
+    thousands of isolated detections from costing a cubic solve."""
+    detections = _points([(0, 0), (100_000, 100_000)])
+    declared = _points([(10, 0)])
+    pairs = list(_optimal_pairs(detections, declared, tolerance_m=50.0))
+    assert pairs == [(0, 0, 10.0)]

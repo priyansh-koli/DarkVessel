@@ -5,6 +5,13 @@ declared position is placed at the acquisition timestamp before anything is comp
 is ever extrapolated past the end of a track: where the acquisition falls outside a vessel's
 bracketing reports, the nearest single report is used instead, and the row says so in
 `position_basis`, so a match built on it can be told apart from one built on a real bracket.
+
+`max_gap` bounds how stale a *single* report may be, and a bracket is not bounded by it at
+all: two reports an hour apart still interpolate, and report `position_age_s` of zero, because
+the acquisition falls between them. The width of that bracket is therefore recorded as
+`position_span_s`, so a position resting on two reports a minute apart can be told from one
+resting on two an hour apart. `fusion.reception` asks the same question of the archive as a
+whole.
 """
 
 from __future__ import annotations
@@ -24,6 +31,7 @@ _EMPTY_COLUMNS = {
     "length_m": "float64",
     "position_basis": "string",
     "position_age_s": "float64",
+    "position_span_s": "float64",
     "velocity_east_ms": "float64",
     "velocity_north_ms": "float64",
 }
@@ -79,6 +87,8 @@ def _position_for(
             "length_m": length_m,
             "position_basis": INTERPOLATED,
             "position_age_s": 0.0,
+            # Zero age, but not zero uncertainty: this is how wide the bracket behind it was.
+            "position_span_s": span,
             "velocity_east_ms": velocity_east,
             "velocity_north_ms": velocity_north,
             "geometry": Point(x, y),
@@ -105,6 +115,7 @@ def _position_for(
         "length_m": length_m,
         "position_basis": NEAREST,
         "position_age_s": age_s,
+        "position_span_s": np.nan,  # no bracket; `position_age_s` is the whole story here
         "velocity_east_ms": velocity_east,
         "velocity_north_ms": velocity_north,
         "geometry": nearest.geometry,

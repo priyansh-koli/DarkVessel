@@ -70,7 +70,7 @@ def fuse(
     """
     detections = classify(
         to_ground(found, scene), ais, scene.acquired_at, tolerance_m, max_gap, geometry
-    )
+    ).detections
     # Structure exclusion happens after matching, never before: a detection AIS explains is a
     # match whatever else stands at that coordinate.
     detections = (
