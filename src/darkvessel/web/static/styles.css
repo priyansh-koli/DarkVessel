@@ -22,6 +22,12 @@
 
   --matched:   #3fb950;
   --dark:      #ff6b5e;
+  /* Dark, but on a search that could not have reached: warm like the dark rose, drained of
+     its alarm. Contrast-checked against --bg, --panel and --panel-2 at 7.5:1 or better. */
+  --shadowed:  #e0a06a;
+  /* The AIS side of the fusion: a declaration the radar drew nothing for. Teal keeps it
+     clear of --decl's blue, which marks a declaration that behaved. 8.8:1 or better. */
+  --undetected:#3fd0c0;
   --structure: #b98cff;
   --unsearched:#8b98a8;
   --decl:      #58a6ff;
@@ -165,6 +171,7 @@ h1, h2 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .stat-total     { color: var(--text); }
 .stat-matched   { color: var(--matched); }
 .stat-dark      { color: var(--dark); }
+.stat-shadowed  { color: var(--shadowed); }
 .stat-structure { color: var(--structure); }
 .stat-unsearched{ color: var(--unsearched); }
 .stat .stat-label { color: var(--muted); }
@@ -399,6 +406,7 @@ input[type="range"]:disabled { opacity: .45; cursor: not-allowed; }
 .mark { cursor: pointer; --c: var(--unsearched); }
 .mark-matched   { --c: var(--matched); }
 .mark-dark      { --c: var(--dark); }
+.mark-shadowed  { --c: var(--shadowed); }
 .mark-structure { --c: var(--structure); }
 .mark-unsearched{ --c: var(--unsearched); }
 /* The halo is invisible but hit-testable: the glyphs are small, and a click anywhere in the
@@ -511,11 +519,23 @@ input[type="range"]:disabled { opacity: .45; cursor: not-allowed; }
 .key-glyph { width: 13px; height: 13px; flex: none; overflow: visible; }
 .key-glyph .g-matched   { fill: rgba(63,185,80,.3);  stroke: var(--matched); stroke-width: 1.6; }
 .key-glyph .g-dark      { fill: rgba(255,107,94,.3); stroke: var(--dark); stroke-width: 1.6; }
+.key-glyph .g-shadowed  { fill: none; stroke: var(--shadowed); stroke-width: 1.6; }
 .key-glyph .g-structure { fill: rgba(185,140,255,.3);stroke: var(--structure); stroke-width: 1.6; }
 .key-glyph .g-unsearched{ fill: rgba(139,152,168,.3);stroke: var(--unsearched); stroke-width: 1.6; }
 .key-vector { height: 0; width: 14px; border-top: 2px solid var(--matched); }
 
 .decl-dot { fill: var(--decl); stroke: #05070b; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.decl-dot.is-undetected { fill: var(--undetected); }
+.decl-undetected {
+  fill: none; stroke: var(--undetected); stroke-width: 1.4; stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+/* The reception overlay: only the water that weakens a dark claim is shaded, so an unshaded
+   scene means the archive reaches everywhere in it. */
+.rx-cell { stroke: none; pointer-events: none; }
+.rx-low     { fill: var(--shadowed); }
+.rx-unknown { fill: var(--faint); }
 .decl-raw {
   fill: rgba(240,167,66,.22); stroke: var(--shift); stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
@@ -540,6 +560,7 @@ input[type="range"]:disabled { opacity: .45; cursor: not-allowed; }
   vector-effect: non-scaling-stroke; opacity: .45; stroke-dasharray: 1 4; }
 .trail-matched { --c: var(--matched); }
 .trail-dark { --c: var(--dark); }
+.trail-shadowed { --c: var(--shadowed); }
 .trail-structure { --c: var(--structure); }
 .trail-unsearched { --c: var(--unsearched); }
 
@@ -560,6 +581,11 @@ input[type="range"]:disabled { opacity: .45; cursor: not-allowed; }
 .key { width: 11px; height: 11px; flex: none; }
 .key-matched   { border: 2px solid var(--matched); }
 .key-dark      { border: 2px solid var(--dark); }
+.key-shadowed  { border: 2px solid var(--shadowed); }
+.key-undetected{ border-radius: 0; background: none; border: 2px solid var(--undetected);
+                 transform: rotate(45deg); width: 10px; height: 10px; }
+.key-shadow    { border-radius: 2px; background: rgba(224,160,106,.28);
+                 border: 1px solid rgba(224,160,106,.45); }
 .key-structure { border: 2px solid var(--structure); }
 .key-unsearched{ border: 2px solid var(--unsearched); }
 .key-decl      { border-radius: 50%; background: var(--decl); }
@@ -603,6 +629,8 @@ td.muted { color: var(--faint); }
 }
 .pill-matched   { background: rgba(63,185,80,.14);  color: var(--matched); }
 .pill-dark      { background: rgba(255,107,94,.14); color: var(--dark); }
+.pill-shadowed  { background: rgba(224,160,106,.14); color: var(--shadowed); }
+.pill-undetected{ background: rgba(63,208,192,.14);  color: var(--undetected); }
 .pill-structure { background: rgba(185,140,255,.14);color: var(--structure); }
 .pill-unsearched{ background: rgba(139,152,168,.14);color: var(--unsearched); }
 
@@ -639,6 +667,7 @@ td.muted { color: var(--faint); }
 }
 .verdict-matched   { background: rgba(63,185,80,.07);  border-color: rgba(63,185,80,.28); }
 .verdict-dark      { background: rgba(255,107,94,.07); border-color: rgba(255,107,94,.28); }
+.verdict-shadowed  { background: rgba(224,160,106,.07);border-color: rgba(224,160,106,.28); }
 .verdict-structure { background: rgba(185,140,255,.07);border-color: rgba(185,140,255,.28); }
 .verdict-unsearched{ background: rgba(139,152,168,.07);border-color: rgba(139,152,168,.28); }
 .verdict strong { display: block; margin-bottom: 3px; font-size: 12px; }
@@ -941,3 +970,21 @@ kbd {
   font-size: 11.5px; color: var(--muted);
 }
 .share-pop #share-native { margin-top: 10px; }
+
+/* ───────────────────── the AIS side of the fusion ───────────────────── */
+
+.sub-title {
+  margin: 18px 0 8px; font-family: var(--sans); font-size: 12px; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--muted);
+}
+
+.decl-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.decl-list li {
+  border-left: 2px solid var(--undetected);
+  background: rgba(63,208,192,.06);
+  padding: 6px 10px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 12px;
+}
+.decl-list strong { font-family: var(--mono); font-size: 11.5px; color: var(--undetected); }
+.decl-list span { display: block; margin-top: 2px; color: var(--faint); font-size: 11px; }
+

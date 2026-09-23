@@ -4,8 +4,11 @@
  *   live      — `api/run` re-runs the pipeline per control change.
  *   static    — `darkvessel render` baked every control position; `data/manifest.json` maps a
  *               position to one of the distinct results in `data/runs/`. The structure
- *               register is applied here, which is exact: registering only turns a dark row
- *               into a structure, after matching (see `fusion.register`).
+ *               register and the reception floor are applied here, which is exact: each only
+ *               rewrites a dark row after matching (see `fusion.register`, `fusion.reception`),
+ *               and every row already carries its own `reception_p`. They are re-applied in
+ *               the pipeline's order — register first, then the floor — because a registered
+ *               structure explains a detection better than a shadow does.
  *   snapshot  — an older bundle with only `data/run.json`; controls are read-only.
  *
  * The overlay lives inside a transformed container so pan and zoom stay on the compositor.
@@ -21,8 +24,18 @@
   const STATUS_TEXT = {
     matched: "Matched",
     dark: "Dark",
+    shadowed: "Shadowed",
     structure: "Structure",
     unsearched: "Unsearched",
+  };
+
+  /* The declaration side's verdicts. Only `undetected` is a finding; the other three say why
+     the radar's silence about a declared vessel means nothing. */
+  const DECLARATION_TEXT = {
+    explained: "Explained",
+    undetected: "Undetected",
+    below_detectable: "Below the detector's floor",
+    outside_scene: "Outside the scene",
   };
 
   /* Each slider: the request field it drives, its URL key, and how its value reads. In static
@@ -32,6 +45,9 @@
     maxgap: { key: "max_gap_minutes", url: "gap", baked: true, fmt: (v) => `${v} min` },
     threshold: { key: "detector_threshold", url: "thr", baked: true, fmt: (v) => Number(v).toFixed(2) },
     "register-tolerance": { key: "register_tolerance_m", url: "regtol", baked: false, fmt: (v) => `${v} m` },
+    // Not baked, for the same reason the register is not: it only ever rewrites a dark row
+    // after matching, and `reception_p` is already on every row, so it re-applies exactly.
+    "reception-floor": { key: "reception_floor", url: "rx", baked: false, fmt: (v) => Number(v).toFixed(2) },
   };
 
   const state = {
@@ -40,9 +56,11 @@
     defaults: null,      // request values Reset returns to
     manifest: null,      // static only
     runs: new Map(),     // static only: run id -> Promise<payload>
+    receptionRuns: new Map(),  // static only: reception id -> Promise<model>
     payload: null,
     selected: null,      // detection index
     filter: null,        // status string or null
+    receptionOverlay: false,  // shade water the archive hears poorly
     register: [],        // [{x, y}] ground coordinates
     placing: false,
     dragged: false,      // the last pointer gesture panned, so its click is not a click
@@ -71,6 +89,7 @@
     registerList: $("register-list"),
     clearStructures: $("clear-structures"),
     addStructure: $("add-structure"),
+    declarationSummary: $("declaration-summary"),
     zoomLevel: $("zoom-level"),
     scalebar: $("scalebar"),
     staticNote: $("static-note"),
@@ -78,6 +97,7 @@
   };
 
   const azimuth = $("azimuth");
+  const receptionOverlay = $("reception-overlay");
 
   /* ───────────────────────── formatting ───────────────────────── */
 
@@ -104,6 +124,23 @@
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   const statusText = (status) => STATUS_TEXT[status] || status;
+
+  const declarationText = (status) => DECLARATION_TEXT[status] || status;
+
+  /** Reception as a share, or an em dash where nothing measured it. An unmeasured place and a
+      badly heard one must never print the same, which is why this is not `fmtNum(p, 2)`. */
+  const fmtReception = (d) =>
+    isAbsent(d.reception_p) ? "—" : `${Math.round(d.reception_p * 100)}%`;
+
+  function receptionTitle(d) {
+    if (isAbsent(d.reception_p)) {
+      return `No reception estimate here: ${d.reception_intervals ?? 0} report interval(s) ` +
+        `nearby, too few to say. Reported dark on the search alone.`;
+    }
+    return `An AIS report would have placed a vessel here at the acquisition instant about ` +
+      `${Math.round(d.reception_p * 100)}% of the time, from ${d.reception_intervals} ` +
+      `nearby report interval(s).`;
+  }
 
   /* ───────────────────────── controls: values in both modes ───────────────────────── */
 
@@ -142,6 +179,7 @@
       detector_threshold: sliderValue("threshold"),
       apply_azimuth: azimuth.checked,
       register_tolerance_m: sliderValue("register-tolerance"),
+      reception_floor: sliderValue("reception-floor"),
     };
   }
 
@@ -161,6 +199,7 @@
       detector_threshold: read("threshold"),
       apply_azimuth: azimuth.hasAttribute("checked"),
       register_tolerance_m: read("register-tolerance"),
+      reception_floor: read("reception-floor"),
     };
   }
 
@@ -303,6 +342,7 @@
       detector_threshold: r.detector_threshold,
       apply_azimuth: r.apply_azimuth ? "true" : "false",
       register_tolerance_m: r.register_tolerance_m,
+      reception_floor: r.reception_floor,
     });
     for (const p of state.register) params.append("register", `${p.x},${p.y}`);
     return params.toString();
@@ -327,6 +367,7 @@
 
     const payload = {
       ...base,
+      reception: await bakedReception(r.max_gap_minutes, signal),
       detections: base.detections.map((d) => ({ ...d })),
       register: state.register.map((p) => ({ ...p, ...groundToPixel(base.scene, p.x, p.y) })),
       config: {
@@ -337,6 +378,13 @@
       },
     };
 
+    // The run was baked at some floor, so first put every shadowed row back to dark. From
+    // there the pipeline's own order applies: register (dark -> structure), then the floor
+    // (whatever is still dark -> shadowed). Doing it the other way round would let a shadow
+    // hide a registered structure, which the pipeline never does.
+    for (const d of payload.detections) {
+      if (d.status === "shadowed") d.status = "dark";
+    }
     // Mirrors `fusion.register.Register.mark`: only a dark row changes, and only to structure.
     for (const d of payload.detections) {
       if (d.status !== "dark") continue;
@@ -344,12 +392,47 @@
         d.status = "structure";
       }
     }
+    // Mirrors `fusion.reception.Coverage.mark`: a measured estimate below the floor, never a
+    // missing one.
+    for (const d of payload.detections) {
+      if (d.status === "dark" && !isAbsent(d.reception_p) && d.reception_p < r.reception_floor) {
+        d.status = "shadowed";
+      }
+    }
     payload.counts = countStatuses(payload.detections);
+    if (payload.reception) payload.reception = { ...payload.reception, floor: r.reception_floor };
+    if (payload.agreement) {
+      // `radar_only` is dark plus shadowed, so the floor cannot change it — but recount rather
+      // than assert, because a baked payload is data this file did not produce.
+      payload.agreement = {
+        ...payload.agreement,
+        radar_only: payload.counts.dark + payload.counts.shadowed,
+      };
+    }
     return payload;
   }
 
+  /** The reception model for a max gap. `darkvessel render` writes one file per gap class
+      rather than a copy inside every run that shares one, so this is a second lazy fetch. */
+  async function bakedReception(maxGapMinutes, signal) {
+    const index = state.manifest.reception;
+    if (!index) return null;
+    // Positional, by the gap's place in its own grid — the same lookup the runs use. Keying
+    // by the gap's value would mean matching a JSON number against a string Python formatted.
+    const id = index[state.manifest.grid.max_gap_minutes.indexOf(maxGapMinutes)];
+    if (id === undefined || id === null) return null;
+    if (!state.receptionRuns.has(id)) {
+      const pending = getJson(`data/reception/${id}.json`, signal);
+      state.receptionRuns.set(id, pending);
+      pending.catch(() => state.receptionRuns.delete(id));
+    }
+    return state.receptionRuns.get(id);
+  }
+
   function countStatuses(detections) {
-    const counts = { total: detections.length, matched: 0, dark: 0, structure: 0, unsearched: 0 };
+    const counts = {
+      total: detections.length, matched: 0, dark: 0, shadowed: 0, structure: 0, unsearched: 0,
+    };
     for (const d of detections) counts[d.status] = (counts[d.status] || 0) + 1;
     return counts;
   }
@@ -444,7 +527,8 @@
     renderCounts(data.counts);
     renderTable(data.detections);
     renderOverlay(data);
-    renderAis(data.ais, data.detections);
+    renderAis(data.ais, data.detections, data.reception);
+    renderDeclarations(data);
     renderRegister();
     renderInspector();
     clearStageState();
@@ -516,6 +600,7 @@
       ["total", "Detections", counts.total],
       ["matched", "Matched", counts.matched],
       ["dark", "Dark", counts.dark],
+      ["shadowed", "Shadowed", counts.shadowed],
       ["structure", "Structure", counts.structure],
     ];
     if (counts.unsearched) cards.push(["unsearched", "Unsearched", counts.unsearched]);
@@ -542,7 +627,7 @@
 
     if (!detections.length) {
       els.tbody.innerHTML =
-        `<tr class="empty-row"><td colspan="6">No detections at this threshold. Lower the detector threshold to find fainter targets.</td></tr>`;
+        `<tr class="empty-row"><td colspan="7">No detections at this threshold. Lower the detector threshold to find fainter targets.</td></tr>`;
       return;
     }
 
@@ -558,6 +643,8 @@
           <td class="right ${isAbsent(d.match_distance_m) ? "muted" : ""}">${fmtM(d.match_distance_m, 1)}</td>
           <td class="${d.position_basis ? "" : "muted"}">${d.position_basis ? escapeHtml(d.position_basis) : "—"}</td>
           <td class="right ${d.azimuth_shift_m ? "" : "muted"}">${fmtM(d.azimuth_shift_m, 0)}</td>
+          <td class="right ${isAbsent(d.reception_p) ? "muted" : ""}"
+              title="${escapeHtml(receptionTitle(d))}">${fmtReception(d)}</td>
         </tr>`;
       })
       .join("");
@@ -574,6 +661,10 @@
     defs.append(el("clipPath", { id: "scene-clip" }));
     defs.firstChild.append(el("rect", { x: 0, y: 0, width: scene.width, height: scene.height }));
     svg.append(defs);
+    const reception = group(svg, "reception");
+    reception.setAttribute("clip-path", "url(#scene-clip)");
+    reception.setAttribute("aria-hidden", "true");
+    renderReceptionCells(reception, data);
     const grid = group(svg, "grid");
     grid.setAttribute("clip-path", "url(#scene-clip)");
     const trailLayer = group(svg, "trails");
@@ -660,13 +751,25 @@
       }
 
       const dot = el("circle", {
-        class: "decl-dot",
+        class: `decl-dot${declaration.status === "undetected" ? " is-undetected" : ""}`,
         cx: declaration.drawn.px,
         cy: declaration.drawn.py,
         r: 3,
       });
       dot.append(title(declarationTitle(declaration)));
       decls.append(dot);
+
+      // A declared vessel the radar drew nothing for gets a ring of its own, so the finding
+      // is visible on the scene rather than only in a table.
+      if (declaration.status === "undetected") {
+        decls.append(
+          el("path", {
+            class: "decl-undetected pinned",
+            d: "M0 -11 L11 0 L0 11 L-11 0 Z",
+            "data-anchor": `${declaration.drawn.px},${declaration.drawn.py}`,
+          })
+        );
+      }
     }
 
     for (const detection of data.detections) {
@@ -717,6 +820,13 @@
       g.append(
         el("circle", { class: "glyph-pulse", r: 7 }),
         el("path", { class: "glyph-shape", d: "M0 -8 L8 0 L0 8 L-8 0 Z" })
+      );
+    } else if (detection.status === "shadowed") {
+      // The same diamond as a dark contact, hollow and without the pulse: the radar saw the
+      // same thing, and only the strength of the claim about it is different.
+      g.append(
+        el("path", { class: "glyph-shape", d: "M0 -8 L8 0 L0 8 L-8 0 Z" }),
+        el("path", { class: "glyph-detail", d: "M-4.5 0 L4.5 0" })
       );
     } else if (detection.status === "structure") {
       g.append(
@@ -967,9 +1077,16 @@
   }
 
   function declarationTitle(declaration) {
-    const parts = [`MMSI ${declaration.mmsi}`, `position: ${declaration.position_basis}`];
+    const parts = [`MMSI ${declaration.mmsi}`, declarationText(declaration.status)];
+    parts.push(`position: ${declaration.position_basis}`);
+    if (declaration.position_span_s > 0) {
+      parts.push(`bracket: ${fmtSeconds(declaration.position_span_s)} wide`);
+    }
     if (declaration.azimuth_shift_m > 0.5) {
       parts.push(`azimuth shift: ${fmtM(declaration.azimuth_shift_m)}`);
+    }
+    if (declaration.status === "undetected") {
+      parts.push(`nearest detection: ${fmtM(declaration.nearest_detection_m, 0)}`);
     }
     return parts.join(" · ");
   }
@@ -1000,7 +1117,67 @@
     for (const circle of els.overlay.querySelectorAll(".decl-raw")) circle.setAttribute("r", rawDot);
   }
 
-  function renderAis(ais, detections) {
+  /** Shade only the water that weakens a dark claim: cells the archive hears worse than the
+      floor, and cells nothing measured. Cells above the floor are left clear — the overlay is
+      there to show where the search fails, and painting the healthy majority would bury it. */
+  function renderReceptionCells(layer, data) {
+    if (!state.receptionOverlay || !data.reception) return;
+    const floor = data.reception.floor;
+    for (const cell of data.reception.cells) {
+      const measured = !isAbsent(cell.reception_p);
+      if (measured && cell.reception_p >= floor) continue;
+      const shortfall = measured && floor > 0 ? (floor - cell.reception_p) / floor : 1;
+      layer.append(
+        el("rect", {
+          class: `rx-cell ${measured ? "rx-low" : "rx-unknown"}`,
+          x: cell.px,
+          y: cell.py,
+          width: cell.pw,
+          height: cell.ph,
+          "fill-opacity": (measured ? 0.1 + 0.32 * shortfall : 0.1).toFixed(3),
+        })
+      );
+    }
+  }
+
+  /** The AIS side of the fusion: what the archive declared that the radar did not draw. */
+  function renderDeclarations(data) {
+    const counts = data.declaration_counts;
+    const agreement = data.agreement;
+    if (!counts || !counts.total) {
+      els.declarationSummary.innerHTML =
+        `<p class="hint" style="margin:0">No declarations were placed at this acquisition
+         instant, so there is no other side to report.</p>`;
+      return;
+    }
+
+    const undetected = data.declarations.filter((d) => d.status === "undetected");
+    const recall = agreement && agreement.apparent_recall;
+
+    els.declarationSummary.innerHTML = `
+      <dl class="kv">
+        <dt>Declarations placed</dt><dd>${counts.total}</dd>
+        <dt>Explained by a detection</dt><dd>${counts.explained}</dd>
+        <dt><span class="pill pill-undetected">Undetected</span></dt><dd>${counts.undetected}</dd>
+        <dt>Below the detector's floor</dt><dd class="${counts.below_detectable ? "" : "zero"}">${counts.below_detectable}</dd>
+        <dt>Outside the scene</dt><dd class="${counts.outside_scene ? "" : "zero"}">${counts.outside_scene}</dd>
+      </dl>
+      ${undetected.length ? `<ul class="decl-list">${undetected
+        .map((d) => `<li><strong>MMSI ${escapeHtml(d.mmsi)}</strong>
+          <span>${fmtM(d.length_m)} long · nearest detection ${fmtM(d.nearest_detection_m, 0)}
+          · position ${escapeHtml(d.position_basis)}</span></li>`)
+        .join("")}</ul>` : ""}
+      ${isAbsent(recall) ? "" : `
+      <dl class="kv" style="margin-top:12px">
+        <dt>Apparent recall</dt><dd>${(recall * 100).toFixed(0)}%</dd>
+      </dl>
+      <p class="rule-note">The share of declared, detectable, in-scene vessels the radar also
+      drew — an estimate of this detector's recall that needs no labels. It is biased: vessels
+      that declare themselves are larger and more cooperative than those that do not, and a
+      spoofed declaration counts against the detector although nothing was there to find.</p>`}`;
+  }
+
+  function renderAis(ais, detections, reception) {
     if (!ais) {
       els.aisSummary.innerHTML =
         `<p class="hint" style="margin:0">No AIS archive is configured, so nothing was searched. Every detection is <em>unsearched</em> rather than dark.</p>`;
@@ -1022,7 +1199,19 @@
         .map(([rule, count]) =>
           `<dt>${escapeHtml(rule.replace(/_/g, " "))}</dt><dd class="${count ? "" : "zero"}">−${count}</dd>`)
         .join("")}</dl>` : ""}
-      <p class="rule-note">A dark claim rests on this: it says what the AIS search actually searched.</p>`;
+      <p class="rule-note">A dark claim rests on this: it says what the AIS search actually searched.</p>
+      ${reception ? `
+      <h3 class="sub-title">Reception</h3>
+      <dl class="kv">
+        <dt>Estimated on</dt><dd>${reception.report.used} report intervals</dd>
+        <dt>Cell</dt><dd>${reception.cell_m} m, pooled over its 8 neighbours</dd>
+        <dt>Evidence floor</dt><dd>${reception.min_intervals} intervals</dd>
+        <dt>Claim floor</dt><dd>${Number(reception.floor).toFixed(2)}</dd>
+      </dl>
+      <p class="rule-note">How often the archive would have placed a transmitting vessel at
+      this instant, measured from the vessels it does hold, at this max gap. Where it is low, a
+      detection's silence is not evidence; where nothing measured it, the row says so and
+      stays dark.</p>` : ""}`;
   }
 
   function renderRegister() {
@@ -1108,6 +1297,17 @@
       </div>
 
       <div class="insp-section">
+        <h4>AIS reception here</h4>
+        <dl class="kv">
+          <dt>Reception</dt><dd class="${isAbsent(detection.reception_p) ? "zero" : ""}">${fmtReception(detection)}</dd>
+          <dt>Basis</dt><dd class="${detection.reception_basis === "estimated" ? "" : "zero"}">${escapeHtml((detection.reception_basis ?? "—").replace(/_/g, " "))}</dd>
+          <dt>Report intervals</dt><dd>${detection.reception_intervals ?? "—"}</dd>
+          <dt>Claim floor</dt><dd>${Number(data.config.reception_floor ?? 0).toFixed(2)}</dd>
+        </dl>
+        <p class="rule-note">${escapeHtml(receptionTitle(detection))}</p>
+      </div>
+
+      <div class="insp-section">
         <h4>Contextual layers</h4>
         <dl class="kv">
           <dt>Distance to shore</dt><dd class="zero">${fmtM(detection.distance_to_shore_m)}</dd>
@@ -1132,13 +1332,29 @@
         exclusion runs after matching, so a vessel AIS explains is never reclassified this way.`;
     }
 
+    if (detection.status === "shadowed") {
+      return `<strong>Searched, but the search could not have reached here.</strong>
+        The archive would have placed a transmitting vessel at this position and instant only
+        about ${fmtReception(detection)} of the time — below the
+        ${Number(data.config.reception_floor ?? 0).toFixed(2)} floor — measured from
+        ${detection.reception_intervals} report intervals nearby. So its silence is not
+        evidence of anything. Lower the floor to report it dark anyway; the estimate stays on
+        the row either way.`;
+    }
+
     if (detection.status === "dark") {
       const searched = detection.declarations_searched ?? 0;
+      const reach = isAbsent(detection.reception_p)
+        ? `Nothing nearby measures how well the archive hears this water
+           (${detection.reception_intervals ?? 0} report interval${detection.reception_intervals === 1 ? "" : "s"}),
+           so this rests on the search alone — a missing estimate is never treated as a poor one.`
+        : `The archive would have placed a transmitting vessel here about
+           ${fmtReception(detection)} of the time, so its silence carries weight.`;
       return `<strong>Searched, and nothing explains it.</strong>
         ${searched} declaration${searched === 1 ? " was" : "s were"} placed at the acquisition
         instant and none could be assigned to this detection within ${fmtM(detection.tolerance_m)}.
         A declaration may still lie within tolerance and belong to a nearer detection — the
-        assignment is one-to-one.`;
+        assignment is one-to-one. ${reach}`;
     }
 
     const bits = [];
@@ -1536,6 +1752,9 @@
     if (r.register_tolerance_m !== d.register_tolerance_m && state.register.length) {
       lines.push(`Same-position tolerance ${r.register_tolerance_m} m`);
     }
+    if (r.reception_floor !== d.reception_floor) {
+      lines.push(`AIS reception floor ${Number(r.reception_floor).toFixed(2)}`);
+    }
     if (state.selected !== null) lines.push(`Detection ${state.selected + 1} selected`);
     return lines.length ? lines : ["Default settings — change a control to share a specific view"];
   }
@@ -1601,21 +1820,61 @@
     ["azimuth_shift_m", (d) => d.azimuth_shift_m],
     ["tolerance_m", (d) => d.tolerance_m],
     ["declarations_searched", (d) => d.declarations_searched],
+    ["reception_p", (d) => d.reception_p],
+    ["reception_basis", (d) => d.reception_basis],
+    ["reception_intervals", (d) => d.reception_intervals],
     ["acquired_at", (d) => d.acquired_at],
     ["scene", (d) => d.scene],
   ];
 
+  /* The other side of the fusion gets its own file: it has one row per declaration, not per
+     detection, so folding it into the detections CSV would mean a table of two shapes. */
+  const DECLARATION_CSV_COLUMNS = [
+    ["mmsi", (d) => d.mmsi],
+    ["status", (d) => d.status],
+    ["length_m", (d) => d.length_m],
+    ["detection", (d) => (isAbsent(d.matched_index) ? null : d.matched_index + 1)],
+    ["nearest_detection_m", (d) => d.nearest_detection_m],
+    ["position_basis", (d) => d.position_basis],
+    ["position_age_s", (d) => d.position_age_s],
+    ["position_span_s", (d) => d.position_span_s],
+    ["azimuth_shift_m", (d) => d.azimuth_shift_m],
+    ["declared_x", (d) => d.raw.x],
+    ["declared_y", (d) => d.raw.y],
+    ["drawn_x", (d) => d.drawn.x],
+    ["drawn_y", (d) => d.drawn.y],
+  ];
+
+  function csvCell(v) {
+    if (isAbsent(v)) return "";
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }
+
+  function csvText(columns, rows) {
+    const lines = [columns.map(([name]) => name).join(",")];
+    for (const row of rows) lines.push(columns.map(([, get]) => csvCell(get(row))).join(","));
+    return lines.join("\n") + "\n";
+  }
+
   function exportCsv() {
     const data = state.payload;
     if (!data) return;
-    const cell = (v) => {
-      if (isAbsent(v)) return "";
-      const s = String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    const lines = [CSV_COLUMNS.map(([name]) => name).join(",")];
-    for (const d of data.detections) lines.push(CSV_COLUMNS.map(([, get]) => cell(get(d))).join(","));
-    download(`${data.scene.id}-detections.csv`, lines.join("\n") + "\n", "text/csv");
+    download(
+      `${data.scene.id}-detections.csv`,
+      csvText(CSV_COLUMNS, data.detections),
+      "text/csv"
+    );
+  }
+
+  function exportDeclarations() {
+    const data = state.payload;
+    if (!data || !data.declarations.length) return;
+    download(
+      `${data.scene.id}-declarations.csv`,
+      csvText(DECLARATION_CSV_COLUMNS, data.declarations),
+      "text/csv"
+    );
   }
 
   function exportJson() {
@@ -1678,6 +1937,12 @@
 
     azimuth.addEventListener("change", controlsChanged);
 
+    // Purely a view: nothing is re-run, the cells are already in the payload.
+    receptionOverlay.addEventListener("change", () => {
+      state.receptionOverlay = receptionOverlay.checked;
+      render();
+    });
+
     els.addStructure.addEventListener("click", () => setPlacing(!state.placing));
     els.clearStructures.addEventListener("click", () => {
       state.register = [];
@@ -1703,6 +1968,7 @@
 
     bindShare();
     $("export-csv").addEventListener("click", exportCsv);
+    $("export-declarations").addEventListener("click", exportDeclarations);
     $("export-json").addEventListener("click", exportJson);
   }
 

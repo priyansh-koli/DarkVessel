@@ -82,6 +82,29 @@
           </span>
         </label>
       </div>
+
+      <div class="field">
+        <div class="field-label">
+          <label for="reception-floor">AIS reception floor</label>
+          <button type="button" class="info" aria-label="About the AIS reception floor" aria-describedby="tip-reception">i</button>
+          <span class="info-tip" role="tooltip" id="tip-reception"><b>What it is:</b> how reliably the archive must hear this water before a detection's silence counts as evidence. Reception is estimated from how often the vessels the archive <em>does</em> hold report, near each place.<br><b>Use:</b> raise it and dark detections standing where AIS barely reaches are reported <em>shadowed</em> instead — the search could not have seen them. A detection with no reception estimate at all stays dark, never shadowed: an absence of evidence is not evidence.<br><b>On the radar:</b> turn on the reception overlay to see the shadows.</span>
+        </div>
+        <div class="field-row">
+          <input type="range" id="reception-floor" min="0" max="1" step="0.05" value="0.5">
+          <output for="reception-floor" id="reception-floor-out" class="num">0.50</output>
+        </div>
+        <p class="hint">Below this, a dark claim is not supportable — the archive could not have heard it.</p>
+      </div>
+
+      <div class="field field-toggle">
+        <label class="switch" for="reception-overlay">
+          <input type="checkbox" id="reception-overlay">
+          <span class="switch-text">
+            <span class="field-label">Show reception shadows</span>
+            <span class="hint">Shade the water the AIS archive reaches poorly, or not measurably at all.</span>
+          </span>
+        </label>
+      </div>
     </section>
 
     <section class="panel">
@@ -184,6 +207,8 @@
         <div class="viewer-tools">
           <button type="button" class="icon-btn icon-btn-wide" id="export-csv"
                   title="Download the detections as CSV">CSV</button>
+          <button type="button" class="icon-btn icon-btn-wide" id="export-declarations"
+                  title="Download the AIS declarations and their verdicts as CSV">AIS CSV</button>
           <button type="button" class="icon-btn icon-btn-wide" id="export-json"
                   title="Download the whole run as JSON">JSON</button>
         </div>
@@ -199,6 +224,7 @@
               <th scope="col" class="right">Distance</th>
               <th scope="col">Basis</th>
               <th scope="col" class="right">Az. shift</th>
+              <th scope="col" class="right">Reception</th>
             </tr>
           </thead>
           <tbody id="detections-body"></tbody>
@@ -220,14 +246,25 @@
       <ul class="legend" aria-label="Legend">
       <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><path class="g-matched" d="M0 -9 L4.5 -2 L4.5 7 L-4.5 7 L-4.5 -2 Z"/></svg>Matched — hull points along its AIS course</li>
       <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><path class="g-dark" d="M0 -8 L8 0 L0 8 L-8 0 Z"/></svg>Dark — searched, nothing explains it</li>
+      <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><path class="g-shadowed" d="M0 -8 L8 0 L0 8 L-8 0 Z"/></svg>Shadowed — dark, but the AIS archive could not have heard it here</li>
       <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><rect class="g-structure" x="-6" y="-6" width="12" height="12"/></svg>Structure — a registered fixed position</li>
       <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><circle class="g-unsearched" r="5"/></svg>Unsearched — no AIS supplied</li>
       <li><span class="key key-vector" aria-hidden="true"></span>Speed vector — 20 seconds ahead</li>
       <li><span class="key key-decl" aria-hidden="true"></span>AIS declaration</li>
       <li><span class="key key-shift" aria-hidden="true"></span>Azimuth shift applied</li>
       <li><span class="key key-tol" aria-hidden="true"></span>Match tolerance around a declaration</li>
+      <li><span class="key key-undetected" aria-hidden="true"></span>Undetected declaration — AIS says a vessel is here, the radar drew nothing</li>
+      <li><span class="key key-shadow" aria-hidden="true"></span>Reception shadow — water the archive hears poorly</li>
       <li><span class="key key-trail" aria-hidden="true"></span>Track — contacts move at their declared course and speed; dark contacts drift at an assumed speed</li>
       </ul>
+    </section>
+
+    <section class="panel" id="declarations-panel">
+      <h2 class="panel-title">The other side</h2>
+      <p class="hint hint-block">A dark vessel is a detection no declaration explains. This is
+        the mirror: a declaration no detection explains — a position that may not be true, or a
+        hull the detector missed. The same assignment answers both.</p>
+      <div id="declaration-summary"></div>
     </section>
 
     <section class="panel" id="ais-panel">
