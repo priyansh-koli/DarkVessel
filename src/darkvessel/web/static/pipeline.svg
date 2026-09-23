@@ -1,10 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 940" width="1100" height="940"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 1250" width="1140" height="1250"
      role="img" aria-labelledby="t d">
 <title id="t">darkvessel pipeline</title>
 <desc id="d">Two input paths — a Sentinel-1 SAR scene and an AIS archive — are prepared
 separately, fused by an optimal one-to-one assignment within a distance tolerance, then
-filtered through a structure register, producing four possible statuses: matched, structure,
-dark and unsearched.</desc>
+filtered through a structure register and an AIS reception model, producing five possible
+statuses for a detection: matched, structure, dark, shadowed and unsearched. The declarations
+the assignment left unexplained are judged in turn, as explained, undetected, below the
+detector's floor, or outside the scene.</desc>
 
 <style>
   .bg    { fill: #0b1017; }
@@ -24,6 +26,7 @@ dark and unsearched.</desc>
   .flow  { stroke: #3d4c61; stroke-width: 2; fill: none; marker-end: url(#a); }
   .fix   { font: 700 12px ui-sans-serif,-apple-system,sans-serif; fill: #0b1017; }
   .chip  { font: 600 15px ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  .chips { font: 600 13.5px ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
 </style>
 
 <defs>
@@ -32,10 +35,10 @@ dark and unsearched.</desc>
   </marker>
 </defs>
 
-<rect class="bg" width="1100" height="940"/>
+<rect class="bg" width="1140" height="1250"/>
 
 <text class="ttl" x="40" y="42">How one scene becomes a dark-vessel claim</text>
-<text class="sub" x="40" y="66">Two paths are prepared independently, then fused. Circled numbers mark the three places built to avoid silent errors.</text>
+<text class="sub" x="40" y="66">Two paths are prepared independently, then fused. Circled numbers mark the four places built to avoid silent errors.</text>
 
 <!-- ───────────── input bands ───────────── -->
 <rect class="band" x="34" y="92" width="496" height="404"/>
@@ -103,39 +106,71 @@ dark and unsearched.</desc>
 <text class="s" x="176" y="626">A greedy “closest pair first” matcher can consume the declaration another detection needed.</text>
 
 <path class="flow" d="M400 642 V678"/>
-<path class="flow" d="M700 642 V678"/>
+<path class="flow" d="M750 642 V678"/>
 <text class="mono" x="352" y="666">explained</text>
-<text class="mono" x="712" y="666">unexplained</text>
+<text class="mono" x="762" y="666">unexplained</text>
 
-<!-- ───────────── after fusion ───────────── -->
-<rect class="card" x="560" y="686" width="390" height="76"/>
-<circle cx="928" cy="706" r="11" fill="#4ea8de"/><text class="fix" x="928" y="711" text-anchor="middle">3</text>
-<text class="n" x="582" y="714">Structure register</text>
-<text class="s" x="582" y="734">Recurrence, not appearance: a position carrying a detection</text>
-<text class="s" x="582" y="750">acquisition after acquisition is not a ship. Grouping is order-free.</text>
+<!-- ───────────── after fusion: the radar side ───────────── -->
+<rect class="card" x="620" y="686" width="420" height="76"/>
+<circle cx="1018" cy="706" r="11" fill="#4ea8de"/><text class="fix" x="1018" y="711" text-anchor="middle">3</text>
+<text class="n" x="642" y="714">Structure register</text>
+<text class="s" x="642" y="734">Recurrence, not appearance: a position carrying a detection</text>
+<text class="s" x="642" y="750">acquisition after acquisition is not a ship. Grouping is order-free.</text>
 
-<path class="flow" d="M400 678 V830"/>
-<path class="flow" d="M660 762 V830"/>
-<path class="flow" d="M850 762 V830"/>
+<rect class="card" x="620" y="790" width="420" height="76"/>
+<circle cx="1018" cy="810" r="11" fill="#4ea8de"/><text class="fix" x="1018" y="815" text-anchor="middle">4</text>
+<text class="n" x="642" y="818">AIS reception</text>
+<text class="s" x="642" y="838">Could the search have reached here at all? Estimated from how often the</text>
+<text class="s" x="642" y="854">archive's own vessels report nearby. No estimate leaves a detection dark.</text>
+
+<path class="flow" d="M830 762 V786"/>
+<path class="flow" d="M400 678 V930"/>
+<path class="flow" d="M620 724 H600 V930"/>
+<path class="flow" d="M800 866 V930"/>
+<path class="flow" d="M960 866 V930"/>
 
 <!-- statuses -->
-<rect x="300" y="830" width="200" height="46" rx="9" fill="#3fb95018" stroke="#3fb95070"/>
-<text class="chip" x="400" y="859" text-anchor="middle" fill="#3fb950">matched</text>
+<rect x="40" y="930" width="230" height="46" rx="9" fill="#8b98a814" stroke="#8b98a860"/>
+<text class="chip" x="155" y="959" text-anchor="middle" fill="#9aa8ba">unsearched</text>
 
-<rect x="560" y="830" width="200" height="46" rx="9" fill="#b98cff18" stroke="#b98cff70"/>
-<text class="chip" x="660" y="859" text-anchor="middle" fill="#b98cff">structure</text>
+<rect x="300" y="930" width="200" height="46" rx="9" fill="#3fb95018" stroke="#3fb95070"/>
+<text class="chip" x="400" y="959" text-anchor="middle" fill="#3fb950">matched</text>
 
-<rect x="780" y="830" width="140" height="46" rx="9" fill="#ff6b5e18" stroke="#ff6b5e70"/>
-<text class="chip" x="850" y="859" text-anchor="middle" fill="#ff6b5e">dark</text>
+<rect x="520" y="930" width="160" height="46" rx="9" fill="#b98cff18" stroke="#b98cff70"/>
+<text class="chip" x="600" y="959" text-anchor="middle" fill="#b98cff">structure</text>
 
-<rect x="40" y="830" width="230" height="46" rx="9" fill="#8b98a814" stroke="#8b98a860"/>
-<text class="chip" x="155" y="859" text-anchor="middle" fill="#9aa8ba">unsearched</text>
-<text class="s" x="40" y="898">No AIS was supplied at all — a detection</text>
-<text class="s" x="40" y="914">nobody has tried to explain, not a dark claim.</text>
+<rect x="730" y="930" width="140" height="46" rx="9" fill="#ff6b5e18" stroke="#ff6b5e70"/>
+<text class="chip" x="800" y="959" text-anchor="middle" fill="#ff6b5e">dark</text>
+
+<rect x="890" y="930" width="160" height="46" rx="9" fill="#e0a06a18" stroke="#e0a06a70"/>
+<text class="chip" x="970" y="959" text-anchor="middle" fill="#e0a06a">shadowed</text>
 
 <!-- Routed around the fusion card: an unsearched detection never reaches the matcher. -->
-<path class="flow" d="M155 470 V500 H100 V800 H155 V830" stroke="#2b3748" stroke-dasharray="5 4"/>
+<path class="flow" d="M155 470 V500 H100 V900 H155 V930" stroke="#2b3748" stroke-dasharray="5 4"/>
 
-<text class="s" x="560" y="898">Structure exclusion runs strictly after matching: a detection AIS explains stays matched,</text>
-<text class="s" x="560" y="914">whatever else happens to stand at that coordinate.</text>
+<text class="s" x="40" y="1000">No AIS was supplied at all — a detection</text>
+<text class="s" x="40" y="1016">nobody has tried to explain yet.</text>
+<text class="s" x="400" y="1000">Each stage only ever rewrites what is still unexplained, so a match is never overridden,</text>
+<text class="s" x="400" y="1016">and a registered structure is never reported as a reception shadow.</text>
+
+<!-- ───────────── the other side ───────────── -->
+<rect class="band" x="34" y="1046" width="1012" height="170"/>
+<text class="h" x="54" y="1074">THE OTHER SIDE — DECLARATIONS NO DETECTION EXPLAINS</text>
+<text class="s" x="54" y="1100">The same assignment answers the mirror question for free. A vessel broadcasting a position where the radar drew nothing is either a</text>
+<text class="s" x="54" y="1118">position that is not true or a hull the detector missed; the other three verdicts say why a miss here means nothing at all.</text>
+
+<rect x="54" y="1140" width="180" height="42" rx="9" fill="#3fb95018" stroke="#3fb95070"/>
+<text class="chips" x="144" y="1167" text-anchor="middle" fill="#3fb950">explained</text>
+
+<rect x="254" y="1140" width="180" height="42" rx="9" fill="#3fd0c018" stroke="#3fd0c070"/>
+<text class="chips" x="344" y="1167" text-anchor="middle" fill="#3fd0c0">undetected</text>
+
+<rect x="454" y="1140" width="250" height="42" rx="9" fill="#8b98a814" stroke="#8b98a860"/>
+<text class="chips" x="579" y="1167" text-anchor="middle" fill="#9aa8ba">below_detectable</text>
+
+<rect x="724" y="1140" width="250" height="42" rx="9" fill="#8b98a814" stroke="#8b98a860"/>
+<text class="chips" x="849" y="1167" text-anchor="middle" fill="#9aa8ba">outside_scene</text>
+
+<!-- Down the right-hand rail, clear of every card: the AIS side leaves the assignment too. -->
+<path class="flow" d="M950 599 H1100 V1046" stroke="#2b3748" stroke-dasharray="5 4"/>
 </svg>

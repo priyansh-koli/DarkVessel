@@ -38,7 +38,7 @@
   <div class="doc-grid">
   <div class="doc-body">
 
-  <h2 id="tour">Five-step tour</h2>
+  <h2 id="tour">Seven-step tour</h2>
   <p>Each step opens the viewer already set up to show one behaviour. The scene is a synthetic
     fixture built so that each of its five vessels takes a different path through the
     pipeline.</p>
@@ -80,9 +80,34 @@
         vessel is ever touched: structure exclusion runs after matching.</p>
       <p><a class="try" href="./?reg=500900.0,6100900.0&amp;select=5">Register one under detection 5 →</a></p>
     </li>
+    <li>
+      <h3>Ask whether the search could have heard</h3>
+      <p>Lower the brightness threshold to 0.30 and two more contacts appear. One is reported
+        <em>dark</em>; the other is <em>shadowed</em>, because the only vessel near it is heard
+        once an hour, so the archive would have placed a transmitting vessel there barely a
+        third of the time. Switch on <em>Show reception shadows</em> to see the water this
+        applies to. A third contact nearby has no estimate at all and stays dark — an absence
+        of evidence is never treated as evidence of absence.</p>
+      <p>Now widen the max AIS gap past an hour. The same reports start covering the
+        acquisition instant, reception rises, and the shadow lifts: one control moves both
+        halves of the claim.</p>
+      <p><a class="try" href="./?thr=0.3&amp;rx=0.5&amp;select=6">See a shadowed contact →</a></p>
+    </li>
+    <li>
+      <h3>Look at the other side</h3>
+      <p>A dark vessel is a detection no declaration explains. <em>The other side</em>, below
+        the key, counts the mirror: declarations no detection explains. Two vessels here
+        broadcast a position the radar drew nothing at — the nearest detection to each is
+        further away than the tolerance. On real water that is either a position that isn't
+        true, or a hull the detector missed.</p>
+      <p>The panel also reports <em>apparent recall</em>: the share of declared, detectable,
+        in-scene vessels the radar also drew. It is an estimate of this detector's recall on
+        this scene that needs no labels — and it is biased, which the panel says.</p>
+      <p><a class="try" href="./">Open the viewer and read the panel →</a></p>
+    </li>
   </ol>
 
-  <h2 id="statuses">The four statuses</h2>
+  <h2 id="statuses">The five statuses</h2>
   <div class="status-grid">
     <div class="status-card" style="--c: var(--matched)">
       <h3>Matched</h3>
@@ -93,6 +118,11 @@
       <h3>Dark</h3>
       <p>AIS was searched and nothing explains it. This is a claim about the evidence
         searched, not a verdict about the ship.</p>
+    </div>
+    <div class="status-card" style="--c: var(--shadowed)">
+      <h3>Shadowed</h3>
+      <p>AIS was searched, but this is water the archive barely hears — it would have placed
+        a transmitting vessel here only rarely, so the silence isn't evidence.</p>
     </div>
     <div class="status-card" style="--c: var(--structure)">
       <h3>Structure</h3>
@@ -138,10 +168,20 @@
   <h3>Structure register</h3>
   <p>Known fixed positions, such as a turbine list. A dark detection within the
     same-position tolerance of one becomes a structure.</p>
+  <h3>AIS reception floor</h3>
+  <p>How reliably the archive must reach a place before a detection's silence there counts as
+    evidence. Below it, a dark detection is reported <em>shadowed</em> instead. It is a policy,
+    not a measurement: every row carries its own reception estimate whatever you set the floor
+    to, and a row with no estimate is never shadowed.</p>
+  <h3>Show reception shadows</h3>
+  <p>Shades the water the archive hears worse than the floor, and the water nothing measured.
+    Anything left unshaded is heard well enough for a dark claim to stand. Purely a view —
+    nothing is re-run.</p>
   <h3>Counts, table, Share and export</h3>
   <p>Click a count card to filter the scene and table to that status. <em>Share</em> copies a
     link that reopens the exact view: every control, every registered position and the
-    selected detection. <em>CSV</em> and <em>JSON</em> download the current run.</p>
+    selected detection. <em>CSV</em> downloads the detections, <em>AIS CSV</em> the declarations
+    and their verdicts, and <em>JSON</em> the whole run.</p>
 
   <h2 id="shortcuts">Keyboard</h2>
   <table class="shortcuts">
@@ -174,6 +214,26 @@
       <dd>A vessel the radar drew that no AIS declaration explains. It is a statement about
         the evidence searched, not an accusation: a transponder may be off, broken, or the
         archive may simply not cover it.</dd>
+    </div>
+    <div>
+      <dt>AIS reception</dt>
+      <dd>How often this archive would have placed a <em>transmitting</em> vessel at the
+        acquisition instant, near a given place. Estimated from how regularly the vessels the
+        archive does hold report nearby, using the same max gap the matcher uses. Where it is
+        low, a detection's silence is not evidence; where nothing measures it, the row says so
+        and stays dark.</dd>
+    </div>
+    <div>
+      <dt>Undetected declaration</dt>
+      <dd>The mirror of a dark vessel: a vessel that broadcast a position inside the scene,
+        long enough for this detector to expect, where the radar drew nothing. Either the
+        position isn't true, or the detector missed the hull.</dd>
+    </div>
+    <div>
+      <dt>Apparent recall</dt>
+      <dd>The share of declared, detectable, in-scene vessels the radar also drew — an estimate
+        of the detector's recall on this scene, needing no labels. Biased: vessels that declare
+        themselves are larger and more cooperative than those that don't.</dd>
     </div>
     <div>
       <dt>Detection</dt>
@@ -276,8 +336,8 @@ darkvessel serve --config configs/pipeline.yaml    # live, at http://127.0.0.1:8
   <nav class="doc-side" aria-label="On this page">
     <p class="toc-title">On this page</p>
     <ul class="toc">
-      <li><a href="#tour">Five-step tour</a></li>
-      <li><a href="#statuses">The four statuses</a></li>
+      <li><a href="#tour">Seven-step tour</a></li>
+      <li><a href="#statuses">The five statuses</a></li>
       <li><a href="#controls">Controls</a></li>
       <li><a href="#shortcuts">Keyboard</a></li>
       <li><a href="#glossary">Glossary</a></li>

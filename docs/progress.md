@@ -20,16 +20,19 @@ Run from the project root:
 
 ```bash
 source .venv/bin/activate          # if missing: python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
-pytest -q                           # expect: 192 passed
+pytest -q                           # expect: 241 passed
 ruff check src/ tests/              # expect: All checks passed!
 darkvessel synthesise --out data/synthetic
 darkvessel run --config configs/pipeline.yaml
 # expect: 5 detections in EPSG:25832 -> outputs/detections.gpkg
-#           4 matched, 1 dark, 0 at a fixed structure, at a tolerance of 200 m
+#           4 matched, 1 dark, 0 in an AIS reception shadow, 0 at a fixed structure, ...
+#         8 declarations searched against the radar
+#           2 undetected, 1 below the detector's floor, 1 outside the scene
+#           radar and AIS agree on 4 of 6 declared, detectable, in-scene vessels ...
 ```
 
 Without the `detector` extra, 5 of those tests (the ones needing torch) are skipped, and pytest
-reports `187 passed, 5 skipped` — that is what CI shows, since it installs `.[dev]` only.
+reports `236 passed, 5 skipped` — that is what CI shows, since it installs `.[dev]` only.
 
 The detector, if the LS-SSDD data is in `data/lsssdd/` (see [models/README.md](../models/README.md)
 for the download):
@@ -42,11 +45,13 @@ darkvessel evaluate --detector cnn # expect: test_offshore F1 0.866, test F1 0.5
 
 ---
 
-## Current state (as of 2026-09-22)
+## Current state (as of 2026-09-23)
 
 | Area | Status |
 |---|---|
 | Tier 1 — core pipeline (tiling, pixel→ground, AIS interpolation, azimuth correction, optimal matching, structure register, recurrence clustering, CLI) | **Done**, tested |
+| AIS reception — per-place estimate of whether the archive could have placed a transmitting vessel, and the `shadowed` status | **Done**, tested. Validated only against the synthetic fixture |
+| The declaration side — declarations no detection explains, and the label-free recall estimate | **Done**, tested. Written as a second GeoPackage layer |
 | AIS ingestion — DMA CSV reader and cleaning rules with per-rule counts | **Done**, tested against the format; not yet run on a real DMA day file |
 | Viewer — FastAPI live app + static bundle (every control baked), radar display, share panel, Guide and How it works pages | **Done**, every control checked in Chrome in both modes, at desktop and phone widths. The radar display and share panel are **not yet published** (see Git below) |
 | Deployment — CI, GitHub Pages | **Live.** CI green on 3.9 and 3.12; static viewer at https://priyansh-koli.github.io/DarkVessel/ |
@@ -57,7 +62,7 @@ darkvessel evaluate --detector cnn # expect: test_offshore F1 0.866, test F1 0.5
 | Analysis — archive-wide concentration analysis, static map | **Not started** |
 | Real data | **Training data only.** LS-SSDD-v1.0 (real Sentinel-1 chips, labelled) is in `data/lsssdd/` (7.8 GB zip + 2.7 GB extracted, git-ignored). The pipeline itself still runs only on the synthetic fixture: no real scene or DMA AIS file yet |
 
-- Tests: 189 passing locally (184 + 5 skipped in CI, which has no torch). Lint: clean.
+- Tests: 241 passing locally (236 + 5 skipped in CI, which has no torch). Lint: clean.
 - Git: `main` tracks `origin` = https://github.com/priyansh-koli/DarkVessel (public). Every push
   to `main` runs CI and republishes the viewer. Working tree clean and in sync with `origin/main`;
   last commit is `97abc44`, which published the detector, radar display and share fix.
@@ -67,6 +72,8 @@ darkvessel evaluate --detector cnn # expect: test_offshore F1 0.866, test F1 0.5
 
 In rough priority order — see [final-goal.md](final-goal.md) for why.
 
+0. Decide the bracket-width question in `fusion/interpolate.py` (see Open questions): the
+   reception work made it concrete rather than theoretical.
 1. Run the pipeline on one real Sentinel-1 scene and the matching DMA AIS day file, with
    `detector: cnn` — and check the CNN on calibrated backscatter (it was trained on 8-bit chips).
 2. Mask land (coastline plus a buffer) before detection: the CNN's inshore false alarms are
@@ -85,7 +92,16 @@ In rough priority order — see [final-goal.md](final-goal.md) for why.
   2026-09-18, deliberately not changed because they alter results): a pair of reports
   bracketing the acquisition is interpolated however far apart they are (`max_gap` only limits
   a lone report); and when the acquisition precedes a track, velocity comes from the track's
-  *last* two reports, not its first two.
+  *last* two reports, not its first two. The first of these got sharper on 2026-09-23: the
+  reception work added a fixture vessel heard once an hour, and it is *declared* at the default
+  10-minute max gap, with `position_age_s` of 0, because two of its hourly reports happen to
+  bracket the pass. A straight line drawn across an hour is a fabrication at any speed. The
+  bracket's width is now recorded as `position_span_s` on every row so the problem is visible,
+  but the behaviour is unchanged and still needs a decision — most likely bounding a bracket by
+  some multiple of `max_gap`, which would change match results.
+- **How the reception floor should be set on real data.** 0.5 is a placeholder chosen so the
+  fixture tells its story; on a real archive it should come from what the reception estimate
+  actually looks like over the study area, and the choice needs stating in the write-up.
 - **The CNN was trained on 8-bit JPEG chips.** Its input normalisation is scale-invariant (and
   tested), but it has not yet seen calibrated σ⁰ backscatter. Check it on one real scene
   before trusting its detections there.
@@ -108,6 +124,23 @@ In rough priority order — see [final-goal.md](final-goal.md) for why.
 - **Viewer behaviours to expect:** turning off the azimuth correction changes 4 matched /
   1 dark into 3 matched / 2 dark; registering a fixed position under the dark vessel
   reclassifies it to `structure` without touching any match. `?select=3` deep-links a detection.
+- **The fixture has four AIS-only vessels (`2191000xx`)** carrying the two newer features: a
+  lane reporting every two minutes 245 m east of the dark vessel (its dense reporting is what
+  makes that darkness mean something, and nothing is detected where it declares, so it is
+  `undetected`); a drifter heard once an hour beside `faint_dark` (which puts that
+  neighbourhood's reception at 1/3, so lowering the threshold to 0.3 reports `faint_dark`
+  `shadowed`); a 12 m vessel (`below_detectable`); and one declared outside the image
+  (`outside_scene`). None of them sits within the 200 m tolerance of any painted target —
+  pinned by `test_synthetic.py`, because one that did would quietly become a fifth story.
+- **`faint_trawler` and `faint_dark` are deliberately different kinds of unknown.** At
+  threshold 0.3 the first is `dark` with `insufficient_evidence` (nothing measures the
+  archive's reach there) and the second is `shadowed` (measured, and low). They look alike and
+  are not: one search came back empty, the other never reached.
+- **The fixture uses `reception_cell_m: 200`**, not the library default of 1000, because the
+  synthetic scene is only 1.6 km across. A real Sentinel-1 scene wants the default or more.
+- **The static bundle roughly tripled** (11 MB to ~33 MB) because reception moves with the max
+  gap, so the gap equivalence classes fragmented from about 5 to all 11. Page weight per
+  visitor is unchanged — runs are fetched lazily — and `site/` is git-ignored and CI-built.
 - **Screenshots:** headless Chrome on macOS clamps windows to 500 px minimum width, so a
   414 px screenshot is a cropped 500 px render and looks broken when it isn't. Render inside a
   414 px iframe to see the real mobile layout.
@@ -324,6 +357,58 @@ In rough priority order — see [final-goal.md](final-goal.md) for why.
 - The viewer now requires a JSON response from `/api/health` before switching to live mode,
   so a static host that answers every path with an HTML page no longer tricks the frontend
   into live mode.
+
+### 2026-09-23 — AIS reception, the declaration side, and a faster matcher
+
+- **`fusion/reception.py` (new).** Estimates, per place, whether the archive would have placed
+  a transmitting vessel at the acquisition instant, from the gaps between the reports of the
+  vessels it already holds: `sum(min(g, 2w)) / sum(g)` over the gaps observed nearby, where
+  `w` is the pipeline's own `max_gap`. Evidence is pooled over a cell and its eight neighbours;
+  a neighbourhood under `min_intervals` gets no estimate rather than a confident one. Below a
+  configured floor, a `dark` detection becomes the new `shadowed` status. A *missing* estimate
+  never shadows anything. `Coverage` deliberately mirrors `fusion.register.Register`
+  (`from_archive` / `mark`, plus a `without_coverage` no-op), and `reception_p`,
+  `reception_basis` and `reception_intervals` are on every row whether or not the stage ran.
+- **`fusion/declarations.py` (new).** The other half of the assignment, which the pipeline used
+  to discard: declarations no detection explains, as `explained` / `undetected` /
+  `below_detectable` / `outside_scene`. `Agreement` turns both sides into a two-sensor
+  confusion matrix and an *apparent recall* — a label-free estimate of the detector's recall on
+  the scene, reported with its biases stated. `classify` now returns a two-sided `Match` and
+  `pipeline.fuse` a `Fusion`; `darkvessel run` writes two GeoPackage layers.
+- **`fusion/match.py` rewritten for scale.** The distance matrix was built with a Python double
+  loop of shapely `.distance` calls and solved densely, which an archive-wide run cannot
+  afford. Now: a k-d tree builds the within-tolerance feasibility graph, `connected_components`
+  splits it, and each block is solved alone — provably the same answer, because no feasible edge
+  crosses a component and the infeasible penalty is flat. `tests/test_match.py` checks that
+  equivalence against the dense solution over 25 random clustered point clouds. Isolated
+  detections and declarations never enter a cost matrix at all. Column writes in `classify` are
+  one vectorised pass per column rather than a `.loc` per matched pair, and
+  `Geometry.displacements` moves a whole archive in one call.
+- **Fixture, config, CLI, viewer, docs.** Four AIS-only vessels added to the synthetic fixture,
+  one per new branch (see Things worth knowing). New settings: `reception_cell_m`,
+  `reception_floor`, `reception_min_intervals`, `smallest_detectable_m`. The viewer gained a
+  reception-floor slider, a shadow overlay, a reception column and inspector section, an
+  "other side" panel, an AIS CSV export, and the `shadowed` status throughout. The pipeline
+  diagram, README, Guide and How it works pages were all updated.
+- **Verified:** 241 tests pass, ruff clean, and both viewer modes were driven in headless
+  Chromium with no console errors — counts, the floor slider, the overlay, the inspector and
+  the exports all checked live and against the static bundle.
+- **Two bugs found while building, both only on paths the unit tests did not cover.** First,
+  `pd.DatetimeIndex(...).asi8` returns the column's *own* resolution, and a GeoPackage hands
+  back milliseconds where the code assumed nanoseconds — so every gap came out a thousand times
+  too short, read as an implausible speed, and the whole reception model was silently thrown
+  away. It only showed through `darkvessel run`, never in-process. Fixed by pinning
+  `as_unit("ns")` before reading the integers. Second, the static bundle looked up its reception
+  model by a key Python wrote as `"10.0"` and JavaScript asked for as `"10"`, so static mode
+  loaded no model at all; the browser check caught it, and the index is now positional like the
+  run index. A third, smaller wrongness was fixed on the way: reception files were being shared
+  between max gaps that shared a *run*, which is not the same thing, so a viewer could describe
+  the wrong search.
+- **Left undone:** the bracket-width question in `fusion/interpolate.py` (now item 0 in Next
+  steps) — `position_span_s` makes it visible but nothing acts on it. Reception is validated
+  only against the synthetic fixture, and the 0.5 floor is a placeholder.
+
+---
 
 ### 2026-09-16 — core package, viewer, deployment
 

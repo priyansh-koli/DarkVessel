@@ -40,8 +40,8 @@
 
   <h2 id="pipeline">The pipeline</h2>
   <figure>
-    <img src="pipeline.svg" width="1100" height="940"
-         alt="The darkvessel pipeline: a SAR path and an AIS path prepared independently, fused by an optimal one-to-one assignment within a tolerance, then filtered through a structure register into four statuses — matched, structure, dark and unsearched.">
+    <img src="pipeline.svg" width="1140" height="1250"
+         alt="The darkvessel pipeline: a SAR path and an AIS path prepared independently, fused by an optimal one-to-one assignment within a tolerance, then filtered through a structure register and an AIS reception model into five statuses — matched, structure, dark, shadowed and unsearched — while the declarations the assignment left unexplained are judged in turn.">
     <figcaption>The SAR path and the AIS path are prepared separately and meet only at
       fusion.</figcaption>
   </figure>
@@ -54,7 +54,7 @@
     removed, and the viewer's AIS panel shows those counts, because a dark call is only as good
     as the archive that was searched.</p>
 
-  <h2 id="design">Four design choices</h2>
+  <h2 id="design">Five design choices</h2>
   <h3>Interpolate to the acquisition instant</h3>
   <p>A vessel at 12 knots covers about 370 m a minute, more than the match tolerance. So every
     declaration is placed at the exact acquisition time before anything is compared, by
@@ -79,7 +79,56 @@
     appearance model, only provenance. It runs strictly after matching, so a vessel AIS
     explains is never reclassified.</p>
 
-  <h2 id="errors">Two errors it avoids</h2>
+  <h3>Weight a dark claim by whether the archive could hear</h3>
+  <p>An AIS archive's reach isn't uniform. Coastal receivers hear a transponder for some tens
+    of kilometres and no further, so reception falls away offshore — along exactly the gradient
+    a dark-vessel study cares about. Every vessel the archive already holds is used as a probe
+    for how reliably it would have placed a <em>transmitting</em> vessel nearby, and that number
+    goes on every row. Where it's too low to support a claim, the detection is reported
+    <em>shadowed</em> rather than dark.</p>
+
+  <h2 id="reception">AIS reception</h2>
+  <p>The question isn't whether a radio signal would have carried. It's the one the pipeline
+    actually depends on: <em>had a transmitting vessel been here at the acquisition instant,
+    would this archive have placed it?</em> A declaration is placed when a report falls within
+    the max gap of that instant, so that's the question asked, with the same max gap. Decimated
+    archives, receiver outages and satellite revisit all fold in correctly, because all three
+    change the archive rather than the radio.</p>
+  <p>For one vessel's consecutive reports a gap of <em>g</em> seconds apart, an instant drawn
+    from that gap lies within the max gap <em>w</em> of a report over <code>min(g, 2w)</code>
+    of it — <em>w</em> at each end, capped at the whole gap. Summing over the gaps observed in a
+    neighbourhood gives <code>sum(min(g, 2w)) / sum(g)</code>: 1 where reports come faster than
+    the gap allows for, falling towards zero where they don't.</p>
+  <p>Two things it deliberately doesn't do. A neighbourhood with too little evidence gets
+    <em>no</em> estimate rather than a confident one, and a detection there stays dark with the
+    reason on the row — reclassifying on an absence of evidence would be the same mistake as
+    reporting a dark vessel on one, pointed the other way. And the floor is a policy rather than
+    a measurement: the slider states where the bar sits, and the estimate stays on the row
+    whatever you set it to.</p>
+  <p>The caveat is worth stating plainly. A vessel switching its transponder off looks exactly
+    like a receiver that can't hear it, so where many vessels go dark, reception is
+    underestimated and genuine findings are downgraded. That's the wrong direction for
+    enforcement and the right one for a published claim.</p>
+
+  <h2 id="other-side">The other side of the fusion</h2>
+  <p>A dark vessel is a detection no declaration explains. The same assignment answers the
+    mirror question for free — <em>which declarations did no detection explain?</em> — and
+    throwing that half away discards a finding. A vessel broadcasting a position where C-band
+    radar sees nothing is either a position that isn't true, or a hull the detector missed.</p>
+  <p>Three of the four verdicts exist to say when the radar's silence means nothing:
+    <strong>outside_scene</strong> (the declared position isn't in the image, so nothing about
+    it was searched — the declaration side's <em>unsearched</em>), <strong>below_detectable</strong>
+    (shorter than the smallest vessel this detector is trusted to find), and
+    <strong>explained</strong>. Only <strong>undetected</strong> is a finding. A declaration
+    whose length the archive never gave is <em>not</em> excused as too small: an unknown length
+    isn't a small one.</p>
+  <p>Taken together the two sides are a confusion matrix over two sensors, and the share of
+    declared, detectable, in-scene vessels the radar also drew is an estimate of this detector's
+    recall on this scene, from data nobody annotated. It's reported with its biases stated:
+    vessels that declare themselves are larger and more cooperative than those that don't, and
+    a spoofed declaration counts against the detector although nothing was ever there to find.</p>
+
+  <h2 id="errors">Three errors it avoids</h2>
   <h3>1. Greedy matching reports explainable vessels as dark</h3>
   <p>Sorting every detection–declaration pair by distance and claiming the closest first
     doesn't find the most matches. At a 100 m tolerance:</p>
@@ -100,6 +149,12 @@
     A–C 180 m, at a 100 m tolerance. One order gives two groups, another gives one. Whether
     something counts as a structure would depend on how the file was sorted. darkvessel uses
     connected components instead, which give the same answer for every order.</p>
+
+  <h3>3. Treating an archive's silence as uniform evidence</h3>
+  <p>A map of unexplained detections drawn without accounting for where the archive can
+    actually hear is partly a map of where the receivers are — and the bias runs the wrong way,
+    because reception is worst offshore, which is where a dark vessel matters. See
+    <a href="#reception">AIS reception</a> for what is estimated and how.</p>
 
   <h2 id="detector">The detector</h2>
   <p>The viewer here runs a deterministic stand-in: it flags pixels above a brightness
@@ -173,8 +228,10 @@
     <p class="toc-title">On this page</p>
     <ul class="toc">
       <li><a href="#pipeline">The pipeline</a></li>
-      <li><a href="#design">Four design choices</a></li>
-      <li><a href="#errors">Two errors it avoids</a></li>
+      <li><a href="#design">Five design choices</a></li>
+      <li><a href="#reception">AIS reception</a></li>
+      <li><a href="#other-side">The other side of the fusion</a></li>
+      <li><a href="#errors">Three errors it avoids</a></li>
       <li><a href="#detector">The detector</a></li>
       <li><a href="#limits">What it can't yet claim</a></li>
     </ul>

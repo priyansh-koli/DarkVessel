@@ -9,7 +9,7 @@ because it decides everything else.
 | What the visitor gets | Every control position pre-computed, fully interactive | Controls that re-run the pipeline |
 | Runtime on the server | None — plain files | Python 3.9+ |
 | Where it can host | Any static host or CDN | Container platform or VM |
-| Bundle / image size | ~800 KB (synthetic scene) | ~400 MB image |
+| Bundle / image size | ~33 MB on disk, ~15 KB per view (synthetic scene) | ~400 MB image |
 | Cost | Free tier nearly everywhere | Small instance, from ~$0–7/mo |
 | Build step needs Python | Yes (at build time only) | Yes |
 
@@ -101,18 +101,30 @@ site/
   data/run.json           # the default run, with every detection crop inlined as a PNG
   data/manifest.json      # every control position -> the id of its result
   data/runs/<id>.json     # each distinct result, once
+  data/reception/<id>.json # the AIS reception model, once per max gap
 ```
 
 `render` runs the pipeline for every position the tolerance, max-gap, threshold and azimuth
-controls can take (17,600 on the synthetic scene). Detection depends only on the threshold
-and declared positions only on the max gap, so equivalent inputs are run once, and identical
-results are written once: the synthetic scene bakes in about a second into 80 result files.
-Each file is the same payload the live API returns, minus the `config` block the browser
-already knows. The structure register is applied in the browser, which is exact because it
-only ever turns a dark row into a structure after matching. The whole bundle is ~800 KB.
+controls can take (17,600 on the synthetic scene). Detection depends only on the threshold,
+and declared positions and AIS reception only on the max gap, so equivalent inputs are run
+once and identical results are written once: the synthetic scene collapses to about 3,600
+result files. Each is the same payload the live API returns, minus the `config` block the
+browser already knows and minus the reception model, which is written once per max gap in
+`data/reception/` rather than copied into every run that shares one.
 
-A real scene with hundreds of detections makes each result file larger; if the bundle grows
-too big, narrow the grids at the top of `web/bake.py`.
+Two controls are applied in the browser instead of baked, which is exact because each only
+ever rewrites a row that is *still* unexplained after matching, and every row already carries
+what the decision needs: the **structure register** (a click can land anywhere) and the
+**AIS reception floor** (every detection carries its own `reception_p`). The browser re-applies
+them in the pipeline's order — register first, then the floor — having first put every
+`shadowed` row back to `dark`, so the floor a run happened to be baked at does not matter.
+
+**On size.** The whole bundle is about 33 MB on disk, up from ~11 MB before reception was
+added: reception moves with the max gap, so gaps that used to share a result no longer do and
+the number of distinct runs roughly doubled. What a *visitor* downloads is unchanged — the
+frontend fetches one ~15 KB run file per control position, lazily — so this is a publishing
+cost, not a page-weight one. A real scene with hundreds of detections makes each result file
+larger; if the bundle grows too big, narrow the grids at the top of `web/bake.py`.
 
 Check it locally before shipping:
 
