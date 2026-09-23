@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 from affine import Affine
+from shapely import Polygon
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,17 @@ class Scene:
     acquired_at: datetime
     heading_deg: float
     incidence_deg: float
+
+    @property
+    def footprint(self) -> Polygon:
+        """The ground polygon these pixels cover, in `crs`: what a search of this scene searched.
+
+        Built from the four image corners rather than from a bounding box, so a transform with
+        any rotation in it still describes the ground the radar actually looked at.
+        """
+        height, width = self.image.shape
+        corners = ((0, 0), (width, 0), (width, height), (0, height))
+        return Polygon([self.transform * corner for corner in corners])
 
 
 def read_scene(directory: str | Path) -> Scene:
