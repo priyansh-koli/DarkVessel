@@ -8,6 +8,7 @@ from pathlib import Path
 
 import yaml
 
+from darkvessel.data.tiling import Tiling
 from darkvessel.fusion.azimuth import Geometry
 from darkvessel.fusion.declarations import SMALLEST_DETECTABLE_M
 from darkvessel.fusion.reception import MIN_INTERVALS, RECEPTION_CELL_M, RECEPTION_FLOOR
@@ -19,8 +20,9 @@ class RunConfig:
     ais_path: Path | None
     tolerance_m: float
     max_gap: timedelta
-    tile_px: int
-    overlap_px: int
+    # `None` leaves the choice to the detector's `preferred_tiling` (see `tiling_for`).
+    tile_px: int | None
+    overlap_px: int | None
     detector_threshold: float | None
     output_path: Path
     geometry: Geometry | None
@@ -35,6 +37,21 @@ class RunConfig:
     # The shortest vessel this detector is trusted to find. `None` turns the check off, and
     # then no declaration is ever excused as too small to expect.
     smallest_detectable_m: float | None = SMALLEST_DETECTABLE_M
+
+    def tiling_for(self, detector) -> Tiling:
+        """The configured tiling, or the detector's own where the configuration names none.
+
+        Either value can be left out on its own: the other still comes from the detector.
+        """
+        preferred = getattr(detector, "preferred_tiling", None) or DEFAULT_TILING
+        return Tiling(
+            tile_px=self.tile_px if self.tile_px is not None else preferred.tile_px,
+            overlap_px=self.overlap_px if self.overlap_px is not None else preferred.overlap_px,
+        )
+
+
+# For a detector that states no preference: the stand-in, whose fixture was built at this size.
+DEFAULT_TILING = Tiling(tile_px=128, overlap_px=32)
 
 
 def load(path: str | Path) -> RunConfig:
@@ -57,8 +74,8 @@ def load(path: str | Path) -> RunConfig:
         ais_path=Path(raw["ais_path"]) if raw.get("ais_path") else None,
         tolerance_m=float(raw["tolerance_m"]),
         max_gap=timedelta(minutes=float(raw.get("max_gap_minutes", 10))),
-        tile_px=int(raw.get("tile_px", 128)),
-        overlap_px=int(raw.get("overlap_px", 32)),
+        tile_px=int(raw["tile_px"]) if raw.get("tile_px") is not None else None,
+        overlap_px=int(raw["overlap_px"]) if raw.get("overlap_px") is not None else None,
         # Each detector reads its threshold in its own units (brightness, clutter standard
         # deviations, heatmap score); left out, cfar and cnn use their calibrated defaults.
         detector_threshold=(

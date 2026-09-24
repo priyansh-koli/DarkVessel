@@ -19,6 +19,8 @@ from __future__ import annotations
 import numpy as np
 from scipy import ndimage
 
+from darkvessel.data.tiling import Tiling
+
 # Windows in pixels. The guard must cover the largest ship expected (LS-SSDD p95 is ~45 px).
 TARGET_PX = 3
 GUARD_PX = 41
@@ -56,26 +58,59 @@ class CFARDetector:
         blobs, count = ndimage.label(z >= floor)
         if count == 0:
             return np.zeros((0, 3), dtype=np.float32)
-        index = np.arange(1, count + 1)
-        sizes = ndimage.sum_labels(np.ones_like(z), blobs, index)
-        peaks = ndimage.maximum(z, blobs, index)
+        # Measured over the labelled pixels only. `ndimage.maximum` and friends sort or scan
+        # every pixel of the window, which took half of CFAR's time on real Sentinel-1 tiles
+        # where only a handful of pixels clear the floor.
+        rows, cols = np.nonzero(blobs)
+        labels = blobs[rows, cols]
+        scores = z[rows, cols].astype(np.float64)
+        sizes = np.bincount(labels, minlength=count + 1)[1:]
+        peaks = np.full(count + 1, -np.inf)
+        np.maximum.at(peaks, labels, scores)
         # Weighted by excess over the floor: the centroid follows the bright core of the hull.
-        centres = ndimage.center_of_mass(np.clip(z - floor, 0, None) + 1e-6, blobs, index)
+        weight = np.maximum(scores - floor, 0.0) + 1e-6
+        total = np.bincount(labels, weights=weight, minlength=count + 1)[1:]
+        centre_row = np.bincount(labels, weights=weight * rows, minlength=count + 1)[1:] / total
+        centre_col = np.bincount(labels, weights=weight * cols, minlength=count + 1)[1:] / total
         keep = sizes >= self.min_pixels
-        out = [(r, c, s) for (r, c), s, k in zip(centres, peaks, keep) if k]
-        return np.asarray(out, dtype=np.float32).reshape(-1, 3)
+        out = np.column_stack([centre_row, centre_col, peaks[1:]])[keep]
+        return out.astype(np.float32).reshape(-1, 3)
+
+    @property
+    def context_px(self) -> int:
+        """How far from a pixel its score reads: half the background window."""
+        return self.background_px // 2
+
+    @property
+    def preferred_tiling(self) -> Tiling:
+        """Tiles this detector runs best on, used when a run configuration names none.
+
+        CFAR is a local filter, so it needs no tiling at all, only enough memory. What it does
+        need is its full background window around every pixel it owns: with an overlap of at
+        least half that window, each core pixel is scored exactly as a whole-scene pass would
+        score it, and a tile edge never truncates anyone's clutter estimate. Large tiles keep
+        the overlap's share of the work small (about 30% at 1024 px, against 300% at 128).
+        """
+        return Tiling(tile_px=1024, overlap_px=max(64, self.context_px + 8))
 
     def statistic(self, window: np.ndarray) -> np.ndarray:
         """Per-pixel CFAR score: (target mean - clutter mean) / clutter std."""
         image = np.asarray(window, dtype=np.float64)
         valid = np.isfinite(image) & (image != 0)
         image = np.where(valid, image, 0.0)
+        squared = image**2
+        weights = valid.astype(np.float64)
 
-        target = _box_mean(image, valid, self.target_px)
-        outer_sum, outer_n = _box_sums(image, valid, self.background_px)
-        guard_sum, guard_n = _box_sums(image, valid, self.guard_px)
-        outer_sq, _ = _box_sums(image**2, valid, self.background_px)
-        guard_sq, _ = _box_sums(image**2, valid, self.guard_px)
+        # Invalid pixels are already zero in `image` and `squared`, so a plain box sum over
+        # them is the sum over the valid pixels. Each window's count is filtered once.
+        target_n = _box_sum(weights, self.target_px)
+        target = _box_sum(image, self.target_px) / np.maximum(target_n, 1.0)
+        outer_n = _box_sum(weights, self.background_px)
+        guard_n = _box_sum(weights, self.guard_px)
+        outer_sum = _box_sum(image, self.background_px)
+        guard_sum = _box_sum(image, self.guard_px)
+        outer_sq = _box_sum(squared, self.background_px)
+        guard_sq = _box_sum(squared, self.guard_px)
 
         n = np.maximum(outer_n - guard_n, 1.0)
         mean = (outer_sum - guard_sum) / n
@@ -88,14 +123,6 @@ class CFARDetector:
         return z.astype(np.float32)
 
 
-def _box_sums(values: np.ndarray, valid: np.ndarray, size: int) -> tuple[np.ndarray, np.ndarray]:
-    """Sum of valid `values`, and how many valid pixels, in a size x size box at every pixel."""
-    area = float(size * size)
-    total = ndimage.uniform_filter(np.where(valid, values, 0.0), size=size, mode="constant") * area
-    count = ndimage.uniform_filter(valid.astype(np.float64), size=size, mode="constant") * area
-    return total, count
-
-
-def _box_mean(values: np.ndarray, valid: np.ndarray, size: int) -> np.ndarray:
-    total, count = _box_sums(values, valid, size)
-    return total / np.maximum(count, 1.0)
+def _box_sum(values: np.ndarray, size: int) -> np.ndarray:
+    """Sum of `values` in a size x size box at every pixel, zero beyond the edge."""
+    return ndimage.uniform_filter(values, size=size, mode="constant") * float(size * size)

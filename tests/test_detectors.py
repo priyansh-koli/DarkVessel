@@ -7,6 +7,7 @@ right answer is known.
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from darkvessel.detect import evaluate
@@ -55,6 +56,28 @@ def test_cfar_never_detects_in_no_data():
     sea[:, :80] = 0.0
     z = CFARDetector().statistic(sea)
     assert (z[:, :80] == 0).all()
+
+
+def test_cfar_on_its_own_tiling_finds_what_one_whole_scene_pass_finds():
+    """With an overlap covering the clutter window, a tile edge never truncates a pixel's
+    background, so tiling is invisible in the answer. The old 128/32 default was not."""
+    from darkvessel.data.tiling import Tiling
+    from darkvessel.detect.infer import detect_scene
+
+    sea = _sea(shape=(700, 700), seed=5)
+    rng = np.random.default_rng(1)
+    for row, col in rng.integers(5, 695, size=(40, 2)):
+        sea[row : row + 3, col : col + 3] = 3.0
+    cfar = CFARDetector()
+    whole = detect_scene(sea, cfar, Tiling(tile_px=700, overlap_px=0))
+    tiled = detect_scene(sea, cfar, Tiling(tile_px=256, overlap_px=cfar.context_px + 8))
+    key = ["row", "col"]
+    assert len(whole) > 30
+    pd.testing.assert_frame_equal(
+        whole.sort_values(key).reset_index(drop=True),
+        tiled.sort_values(key).reset_index(drop=True),
+        atol=1e-4,
+    )
 
 
 # ───────────────────────────── scoring ─────────────────────────────

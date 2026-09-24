@@ -15,7 +15,6 @@ from darkvessel import config as config_module
 from darkvessel.data.ais import clean
 from darkvessel.data.scene import read_scene
 from darkvessel.data.synthetic import write_synthetic
-from darkvessel.data.tiling import Tiling
 from darkvessel.detect.factory import make_detector
 from darkvessel.fusion.declarations import (
     BELOW_DETECTABLE,
@@ -72,7 +71,18 @@ def main(argv: list[str] | None = None) -> int:
     bench.add_argument("--out", help="write the report as JSON here")
 
     args = parser.parse_args(argv)
+    try:
+        return _dispatch(args)
+    except (ValueError, ImportError, FileNotFoundError) as error:
+        # A missing file, a missing extra or a bad setting is the user's to fix, and a
+        # traceback hides the one line that says how. DARKVESSEL_DEBUG=1 brings it back.
+        if os.environ.get("DARKVESSEL_DEBUG"):
+            raise
+        print(f"darkvessel {args.command}: {error}", file=sys.stderr)
+        return 2
 
+
+def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "audit-data":
         return _audit_data(Path(args.root))
     if args.command == "train":
@@ -152,8 +162,17 @@ def _run(config_path: Path) -> int:
     # Cleaned before matching, as in the viewer: a dark claim is only as good as the archive
     # searched, and the viewer's cleaning report must describe the same archive this run used.
     ais = clean(gpd.read_file(cfg.ais_path))[0] if cfg.ais_path else None
-    tiling = Tiling(tile_px=cfg.tile_px, overlap_px=cfg.overlap_px)
     detector = make_detector(cfg.detector, cfg.detector_threshold, cfg.detector_weights)
+    tiling = cfg.tiling_for(detector)
+    context_px = getattr(detector, "context_px", 0)
+    if tiling.overlap_px < context_px:
+        print(
+            f"warning: overlap_px {tiling.overlap_px} is under the {context_px} px of context "
+            f"the {cfg.detector} detector reads around each pixel, so pixels near tile edges "
+            "are scored on truncated windows. Leave tile_px and overlap_px out to use the "
+            "detector's own tiling.",
+            file=sys.stderr,
+        )
 
     # Reception is estimated from the same cleaned archive the match searches, so the number
     # beside a dark claim describes the search that made it.
@@ -236,6 +255,8 @@ def _render(config_path: Path, out_dir: Path) -> int:
     cfg = config_module.load(config_path)
     scene = read_scene(cfg.scene_dir)
     ais = gpd.read_file(cfg.ais_path) if cfg.ais_path else None
+    # The viewer re-runs the stand-in detector: the configured tiling or the stand-in's own.
+    tiling = cfg.tiling_for(None)
 
     viewer = Viewer(
         scene,
@@ -249,8 +270,8 @@ def _render(config_path: Path, out_dir: Path) -> int:
         max_gap_minutes=cfg.max_gap.total_seconds() / 60,
         # The viewer re-runs the stand-in detector: its threshold slider is in brightness units.
         detector_threshold=cfg.detector_threshold if cfg.detector == "stub" else 0.5,
-        tile_px=cfg.tile_px,
-        overlap_px=cfg.overlap_px,
+        tile_px=tiling.tile_px,
+        overlap_px=tiling.overlap_px,
         apply_azimuth=cfg.geometry is not None,
         reception_floor=cfg.reception_floor,
     )

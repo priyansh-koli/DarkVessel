@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 
 from darkvessel.config import load
+from darkvessel.data.tiling import Tiling
+from darkvessel.detect.cfar import CFARDetector
 
 _MINIMAL = """
 scene_dir: data/synthetic/scene
@@ -23,8 +25,7 @@ def test_a_minimal_config_fills_in_every_default(tmp_path):
     cfg = load(_config(tmp_path, _MINIMAL))
     assert cfg.scene_dir == Path("data/synthetic/scene")
     assert cfg.max_gap == timedelta(minutes=10)
-    assert cfg.tile_px == 128
-    assert cfg.overlap_px == 32
+    assert cfg.tiling_for(None) == Tiling(tile_px=128, overlap_px=32)
     assert cfg.detector_threshold == 0.5
     assert cfg.output_path == Path("outputs/detections.gpkg")
 
@@ -79,3 +80,17 @@ def test_the_shipped_config_loads(tmp_path):
     cfg = load(Path(__file__).resolve().parents[1] / "configs" / "pipeline.yaml")
     assert cfg.tolerance_m == 200.0
     assert cfg.geometry is not None
+
+
+def test_left_out_tiling_comes_from_the_detector_and_a_stated_one_wins(tmp_path):
+    """CFAR needs its full clutter window around each pixel it owns, so it states its own
+    tiling; a configuration that names one still gets exactly what it named."""
+    cfar = CFARDetector()
+    cfg = load(_config(tmp_path, _MINIMAL))
+    assert cfg.tiling_for(cfar) == cfar.preferred_tiling
+    assert cfar.preferred_tiling.overlap_px >= cfar.context_px
+
+    stated = load(_config(tmp_path, _MINIMAL + "tile_px: 256\n"))
+    overlap = cfar.preferred_tiling.overlap_px
+    assert stated.tiling_for(cfar) == Tiling(tile_px=256, overlap_px=overlap)
+

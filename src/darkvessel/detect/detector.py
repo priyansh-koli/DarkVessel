@@ -3,6 +3,9 @@
 The detector arrives as a parameter, never an import — this Protocol is the whole contract.
 A deterministic stand-in (`detect.stub.BrightPixelDetector`) and a trained CNN both satisfy
 it, and nothing else in the chain changes between them.
+
+One attribute is optional: `preferred_tiling`, the `Tiling` a run uses when its
+configuration names none.
 """
 
 from typing import Protocol

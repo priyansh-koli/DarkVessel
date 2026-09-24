@@ -32,5 +32,10 @@ geometry:
 # `detector_threshold` in its own units; leave it out to use the calibrated default.
 # detector: cnn
 # detector_weights: models/ship_centrenet.pt
-# tile_px: 512      # the CNN is fully convolutional: 512 px tiles run ~2x faster than 128
-# overlap_px: 64
+#
+# Tiling: leave `tile_px` and `overlap_px` out and each detector uses its own — 1024/64 for
+# both `cnn` and `cfar` (CFAR needs its 81 px clutter window around every pixel it owns, and
+# warns if the overlap is smaller). The 128/32 above is what the synthetic fixture is built at.
+#
+# The scene directory holds `scene.json` and either `image.npy` or a GeoTIFF named by
+# `"image": "<file>.tif"` in `scene.json`; a GeoTIFF is read one tile at a time.

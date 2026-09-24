@@ -35,6 +35,9 @@ def create_app(config_path: str | Path) -> FastAPI:
         reception_min_intervals=cfg.reception_min_intervals,
         smallest_detectable_m=cfg.smallest_detectable_m,
     )
+    # The viewer re-runs the stand-in detector, so it uses the configured tiling or the
+    # stand-in's default, never the configured detector's preference.
+    tiling = cfg.tiling_for(None)
     png = scene_png(scene.image)
 
     app = FastAPI(title="darkvessel", docs_url="/api/docs", openapi_url="/api/openapi.json")
@@ -80,8 +83,8 @@ def create_app(config_path: str | Path) -> FastAPI:
                 tolerance_m=tolerance_m,
                 max_gap_minutes=max_gap_minutes,
                 detector_threshold=detector_threshold,
-                tile_px=cfg.tile_px,
-                overlap_px=cfg.overlap_px,
+                tile_px=tiling.tile_px,
+                overlap_px=tiling.overlap_px,
                 apply_azimuth=apply_azimuth,
                 register_xy=_parse_register(register),
                 register_tolerance_m=register_tolerance_m,

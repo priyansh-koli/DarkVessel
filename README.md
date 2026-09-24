@@ -237,8 +237,14 @@ diagnosed, and how to reproduce.
 ```yaml
 detector: cnn                          # in a run configuration
 detector_weights: models/ship_centrenet.pt
-tile_px: 512
 ```
+
+Leave `tile_px` and `overlap_px` out and each detector uses its own tiling (1024 px, 64 px
+overlap for both), which for CFAR scores every pixel on its full clutter window.
+
+A scene directory holds `scene.json` and either `image.npy` (opened as a memory map) or a
+GeoTIFF named by `"image": "scene.tif"` in `scene.json`, read one tile at a time with its
+georeferencing taken from the file.
 
 ## Repository layout
 
