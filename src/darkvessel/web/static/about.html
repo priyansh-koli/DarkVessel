@@ -115,9 +115,10 @@
     mirror question for free — <em>which declarations did no detection explain?</em> — and
     throwing that half away discards a finding. A vessel broadcasting a position where C-band
     radar sees nothing is either a position that isn't true, or a hull the detector missed.</p>
-  <p>Three of the four verdicts exist to say when the radar's silence means nothing:
+  <p>All but one of the verdicts exist to say when the radar's silence means nothing:
     <strong>outside_scene</strong> (the declared position isn't in the image, so nothing about
-    it was searched — the declaration side's <em>unsearched</em>), <strong>below_detectable</strong>
+    it was searched — the declaration side's <em>unsearched</em>), <strong>masked</strong> (on
+    land, or within the land buffer, which the detector was not run over), <strong>below_detectable</strong>
     (shorter than the smallest vessel this detector is trusted to find), and
     <strong>explained</strong>. Only <strong>undetected</strong> is a finding. A declaration
     whose length the archive never gave is <em>not</em> excused as too small: an unknown length

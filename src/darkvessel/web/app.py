@@ -16,6 +16,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from darkvessel import config as config_module
+from darkvessel.data.land import LandMask
 from darkvessel.data.scene import read_scene
 from darkvessel.embed.structures import SAME_POSITION_M
 from darkvessel.render import scene_png
@@ -34,6 +35,7 @@ def create_app(config_path: str | Path) -> FastAPI:
         reception_cell_m=cfg.reception_cell_m,
         reception_min_intervals=cfg.reception_min_intervals,
         smallest_detectable_m=cfg.smallest_detectable_m,
+        land=LandMask.read(cfg.land_path, scene, cfg.land_buffer_m) if cfg.land_path else None,
     )
     # The viewer re-runs the stand-in detector, so it uses the configured tiling or the
     # stand-in's default, never the configured detector's preference.

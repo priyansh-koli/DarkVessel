@@ -37,6 +37,10 @@ class RunConfig:
     # The shortest vessel this detector is trusted to find. `None` turns the check off, and
     # then no declaration is ever excused as too small to expect.
     smallest_detectable_m: float | None = SMALLEST_DETECTABLE_M
+    # Land polygons not to search (any vector file), and how far out to sea to extend them.
+    # See `data.land`. `None` searches the whole scene.
+    land_path: Path | None = None
+    land_buffer_m: float = 0.0
 
     def tiling_for(self, detector) -> Tiling:
         """The configured tiling, or the detector's own where the configuration names none.
@@ -97,4 +101,6 @@ def load(path: str | Path) -> RunConfig:
             if "smallest_detectable_m" in raw and raw["smallest_detectable_m"] is None
             else float(raw.get("smallest_detectable_m", SMALLEST_DETECTABLE_M))
         ),
+        land_path=Path(raw["land_path"]) if raw.get("land_path") else None,
+        land_buffer_m=float(raw.get("land_buffer_m") or 0.0),
     )

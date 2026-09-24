@@ -20,7 +20,7 @@ Run from the project root:
 
 ```bash
 source .venv/bin/activate          # if missing: python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
-pytest -q                           # expect: 241 passed
+pytest -q                           # expect: 261 passed
 ruff check src/ tests/              # expect: All checks passed!
 darkvessel synthesise --out data/synthetic
 darkvessel run --config configs/pipeline.yaml
@@ -32,7 +32,7 @@ darkvessel run --config configs/pipeline.yaml
 ```
 
 Without the `detector` extra, 5 of those tests (the ones needing torch) are skipped, and pytest
-reports `236 passed, 5 skipped` — that is what CI shows, since it installs `.[dev]` only.
+reports `256 passed, 5 skipped` — that is what CI shows, since it installs `.[dev]` only.
 
 The detector, if the LS-SSDD data is in `data/lsssdd/` (see [models/README.md](../models/README.md)
 for the download):
@@ -45,7 +45,7 @@ darkvessel evaluate --detector cnn # expect: test_offshore F1 0.866, test F1 0.5
 
 ---
 
-## Current state (as of 2026-09-23)
+## Current state (as of 2026-09-24)
 
 | Area | Status |
 |---|---|
@@ -62,7 +62,7 @@ darkvessel evaluate --detector cnn # expect: test_offshore F1 0.866, test F1 0.5
 | Analysis — archive-wide concentration analysis, static map | **Not started** |
 | Real data | **Training data only.** LS-SSDD-v1.0 (real Sentinel-1 chips, labelled) is in `data/lsssdd/` (7.8 GB zip + 2.7 GB extracted, git-ignored). The pipeline itself still runs only on the synthetic fixture: no real scene or DMA AIS file yet |
 
-- Tests: 241 passing locally (236 + 5 skipped in CI, which has no torch). Lint: clean.
+- Tests: 261 passing locally (256 + 5 skipped in CI, which has no torch). Lint: clean.
 - Git: `main` tracks `origin` = https://github.com/priyansh-koli/DarkVessel (public). Every push
   to `main` runs CI and republishes the viewer. Working tree clean and in sync with `origin/main`;
   last commit is `97abc44`, which published the detector, radar display and share fix.
@@ -76,8 +76,9 @@ In rough priority order — see [final-goal.md](final-goal.md) for why.
    reception work made it concrete rather than theoretical.
 1. Run the pipeline on one real Sentinel-1 scene and the matching DMA AIS day file, with
    `detector: cnn` — and check the CNN on calibrated backscatter (it was trained on 8-bit chips).
-2. Mask land (coastline plus a buffer) before detection: the CNN's inshore false alarms are
-   the main weakness in `models/README.md`, and more training did not fix them.
+2. Choose the land polygons (OSM land polygons or GSHHG) and the buffer width for the study
+   area, and re-benchmark the CNN inshore with the mask on. The mask itself is built
+   (`data/land.py`, `land_path` / `land_buffer_m`) but has only been run on constructed land.
 3. Build the Earth Engine contextual layers (distance to shore, depth, fishing effort, EEZ).
 4. Archive-wide run and the concentration analysis and map.
 
@@ -150,8 +151,10 @@ In rough priority order — see [final-goal.md](final-goal.md) for why.
   standard deviations (cfar; default 6.0, calibrated on validation), heatmap score (cnn; 0.30,
   shipped in the weights). Leave it out for cfar/cnn. The viewer always runs the stub,
   whatever the config says.
-- **For the CNN use `tile_px: 512`:** it is fully convolutional and gives the same detections at
-  any tile size, but 128 px tiles run ~4x slower than whole images.
+- **Leave `tile_px`/`overlap_px` out for `cnn` and `cfar`:** each then uses its
+  `preferred_tiling` (1024/64). The CNN gives the same detections at any tile size (checked
+  again 2026-09-24 at 512 and 1024 on a real LS-SSDD mosaic); CFAR needs an overlap of at least
+  its `context_px` (40) or tile edges truncate its clutter window, and the CLI warns.
 - **Training is seeded and deterministic enough to compare runs:** two runs with the same seed
   agree on training loss to five decimals, which is how the BatchNorm hypotheses were tested
   on identical weights. A full run is ~1 hour on the M5 (MPS); GroupNorm doubles that.
@@ -167,6 +170,47 @@ In rough priority order — see [final-goal.md](final-goal.md) for why.
 ---
 
 ## Session log
+
+### 2026-09-24 — real-scene reading, land mask, faster CFAR and AIS interpolation
+
+- **`data/scene.py`.** `image.npy` is now opened as a memory map, and a scene can instead be a
+  GeoTIFF named by `"image"` in `scene.json` (`GeoTiffImage`), read one window at a time, with
+  its transform and CRS from the file, no-data and NaN read as 0. GDAL's block cache is capped
+  at 64 MB per read unless `GDAL_CACHEMAX` is set: uncapped, it grew to hold the whole file
+  (825 MB for a 768 MB scene, against 53 MB capped). CFAR over that scene now peaks at 564 MB
+  from a GeoTIFF against 1274 MB loaded whole; the rest is CFAR's per-tile working arrays.
+  `embed/crops.py` reads one window per crop instead of padding the whole scene.
+- **`data/land.py` (new) and the `masked` verdict.** `LandMask` reads land polygons near the
+  scene from any vector file, in any CRS, and buffers them. `detect_scene` skips tiles whose
+  core is all land without reading them, zeroes masked pixels, and drops any detection on the
+  mask. A declaration standing on the mask is now `masked`, not `undetected`, so the mask is
+  never counted against the detector; `Agreement.masked` counts them. CLI, live viewer, static
+  bundle and the viewer's panel all carry it.
+- **Tiling.** `tile_px`/`overlap_px` are now optional; left out, a detector's
+  `preferred_tiling` is used (CFAR and CNN: 1024/64; stub: 128/32). The CLI warns when a stated
+  overlap is under CFAR's `context_px`. On a 4800 px LS-SSDD mosaic, 1024 px tiles gave the CNN
+  the same 14 ships as 512 px, 17% faster; batching several windows per forward pass was tried
+  and removed, as it gained nothing on the M5 GPU.
+- **`detect/cfar.py`.** Blob sizes, peaks and centroids are measured over the labelled pixels
+  only; `ndimage.maximum` was sorting every pixel of every tile. CFAR on the mosaic: 3.72 s to
+  1.65 s, and across 20,251 blobs the output moved by at most 3e-5 px. Each box count is
+  filtered once instead of twice. The old 128/32 tiling changed 1 of 24 detections on the
+  mosaic against a whole-scene pass (a truncated clutter window); the new default matches it,
+  and a test pins that.
+- **`fusion/interpolate.py`.** `positions_at` is vectorised (one sort, then counting per
+  vessel) instead of a Python loop per MMSI: 0.78 s to 0.31 s on 600k reports / 1,500
+  vessels. Checked equal to the old code on 400 random archives; the open velocity question is
+  kept exactly as it was. Fixed on the way: codes are numbered after dropping unusable rows, so a
+  vessel with no usable report cannot shift the others.
+- **Also fixed.** `affine` 3 deprecates `*` for transforms, which produced 474,742 warnings per
+  test run; all uses are now `@` and `affine>=3.0` is pinned. `darkvessel` prints a one-line
+  error for a missing file, extra or setting instead of a traceback (`DARKVESSEL_DEBUG=1`
+  restores it). A GeoTIFF that failed to open raised again in its destructor.
+- **Verified:** 261 tests pass, ruff clean, the CI quick-start greps pass, and every new setting
+  was run through `darkvessel run`, the live API (`TestClient`) and `darkvessel render`.
+- **Left undone:** no real coastline file has been tried; the viewer still re-runs the stub
+  whatever the configured detector; the viewer's scene PNG still reads the whole image.
+
 
 ### 2026-09-22 — viewer layout rebalanced, document pages rebuilt, three accessibility bugs fixed
 

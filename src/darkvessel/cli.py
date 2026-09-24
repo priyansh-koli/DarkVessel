@@ -13,11 +13,13 @@ import geopandas as gpd
 
 from darkvessel import config as config_module
 from darkvessel.data.ais import clean
+from darkvessel.data.land import LandMask
 from darkvessel.data.scene import read_scene
 from darkvessel.data.synthetic import write_synthetic
 from darkvessel.detect.factory import make_detector
 from darkvessel.fusion.declarations import (
     BELOW_DETECTABLE,
+    MASKED,
     OUTSIDE_SCENE,
     UNDETECTED,
 )
@@ -173,6 +175,7 @@ def _run(config_path: Path) -> int:
             "detector's own tiling.",
             file=sys.stderr,
         )
+    land = LandMask.read(cfg.land_path, scene, cfg.land_buffer_m) if cfg.land_path else None
 
     # Reception is estimated from the same cleaned archive the match searches, so the number
     # beside a dark claim describes the search that made it.
@@ -191,6 +194,7 @@ def _run(config_path: Path) -> int:
         coverage=coverage,
         reception_floor=cfg.reception_floor,
         smallest_detectable_m=cfg.smallest_detectable_m,
+        land=land,
     )
     detections, declarations = fusion.detections, fusion.declarations
 
@@ -218,10 +222,18 @@ def _run(config_path: Path) -> int:
         f"  {int(declared.get(UNDETECTED, 0))} undetected, "
         f"{int(declared.get(BELOW_DETECTABLE, 0))} below the detector's floor, "
         f"{int(declared.get(OUTSIDE_SCENE, 0))} outside the scene"
+        + (f", {int(declared.get(MASKED, 0))} on masked land" if land is not None else "")
     )
     print(f"  {fusion.agreement().line()}")
     if coverage is not None:
         print(f"  {coverage.report.line()}")
+    if land is not None:
+        footprint = scene.footprint
+        share = footprint.intersection(land.geometry).area / footprint.area
+        print(
+            f"land mask {cfg.land_path} (buffer {cfg.land_buffer_m:g} m): "
+            f"{share:.1%} of the scene not searched"
+        )
     return 0
 
 
@@ -264,6 +276,7 @@ def _render(config_path: Path, out_dir: Path) -> int:
         reception_cell_m=cfg.reception_cell_m,
         reception_min_intervals=cfg.reception_min_intervals,
         smallest_detectable_m=cfg.smallest_detectable_m,
+        land=LandMask.read(cfg.land_path, scene, cfg.land_buffer_m) if cfg.land_path else None,
     )
     default = RunRequest(
         tolerance_m=cfg.tolerance_m,

@@ -26,6 +26,7 @@ def test_a_minimal_config_fills_in_every_default(tmp_path):
     assert cfg.scene_dir == Path("data/synthetic/scene")
     assert cfg.max_gap == timedelta(minutes=10)
     assert cfg.tiling_for(None) == Tiling(tile_px=128, overlap_px=32)
+    assert cfg.land_path is None and cfg.land_buffer_m == 0.0
     assert cfg.detector_threshold == 0.5
     assert cfg.output_path == Path("outputs/detections.gpkg")
 
@@ -94,3 +95,8 @@ def test_left_out_tiling_comes_from_the_detector_and_a_stated_one_wins(tmp_path)
     overlap = cfar.preferred_tiling.overlap_px
     assert stated.tiling_for(cfar) == Tiling(tile_px=256, overlap_px=overlap)
 
+
+def test_land_settings_are_read(tmp_path):
+    cfg = load(_config(tmp_path, _MINIMAL + "land_path: data/land.gpkg\nland_buffer_m: 250\n"))
+    assert cfg.land_path == Path("data/land.gpkg")
+    assert cfg.land_buffer_m == 250.0

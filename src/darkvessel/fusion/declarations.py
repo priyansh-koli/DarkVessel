@@ -14,13 +14,15 @@ the scene, large enough for this detector to have a fair chance: the fraction th
 drew is an estimate of recall on this scene, from data nobody annotated. `Agreement` reports
 it, with the biases that make it an estimate rather than a measurement stated on the tin.
 
-Four verdicts, and the three that are not findings matter as much as the one that is:
+Five verdicts, and the four that are not findings matter as much as the one that is:
 
 - **explained** — a detection stands where this vessel declared.
 - **undetected** — inside the scene, big enough to expect, and the radar drew nothing. The
   finding.
 - **outside_scene** — the declared position is not in the image. Nothing was searched, so
   nothing can be concluded; the exact counterpart of a detection's `unsearched`.
+- **masked** — inside the image but on land, or within the land buffer, which the detector
+  was not run over (`data.land`). Not searched, so not a finding.
 - **below_detectable** — shorter than the smallest vessel this detector is trusted to find, so
   a miss was expected and says nothing about this vessel. A declaration whose length the
   archive never gave is *not* put here: an unknown length is not a small one.
@@ -44,6 +46,7 @@ EXPLAINED = "explained"
 UNDETECTED = "undetected"
 OUTSIDE_SCENE = "outside_scene"
 BELOW_DETECTABLE = "below_detectable"
+MASKED = "masked"
 
 # The shortest vessel a Sentinel-1 IW detector is given a fair chance at. At 10 m ground
 # spacing a 20 m hull is two pixels, which is the floor of what any of this project's
@@ -85,6 +88,7 @@ class Agreement:
     ais_only: int
     outside_scene: int
     below_detectable: int
+    masked: int = 0
 
     @property
     def apparent_recall(self) -> float | None:
@@ -108,12 +112,15 @@ def review(
     footprint: shapely.Geometry | None,
     tolerance_m: float,
     smallest_detectable_m: float | None = SMALLEST_DETECTABLE_M,
+    masked: shapely.Geometry | None = None,
 ) -> gpd.GeoDataFrame:
     """Give every declaration a verdict against what the radar drew. See the module docstring.
 
     `declared` is `fusion.match.Match.declared` — positions already moved to where the radar
     would have drawn them, carrying the detection each one explains. `footprint` bounds what
     was searched; `None` means no footprint was supplied, and then nothing is ruled outside it.
+    `masked` is the part of the footprint the detector was not run over (`data.land`), or
+    `None` where nothing was masked.
     """
     reviewed = declared.copy()
     if reviewed.empty:
@@ -127,6 +134,11 @@ def review(
 
     explained = reviewed["detection"].notna().to_numpy()
     inside = _inside(reviewed, footprint)
+    on_mask = (
+        np.zeros(len(reviewed), dtype=bool)
+        if masked is None or masked.is_empty
+        else shapely.intersects(masked, reviewed.geometry.values)
+    )
     length = reviewed["length_m"].to_numpy(dtype=float)
     # `length < floor` is False for nan, which is the wanted answer: an unknown length is not
     # evidence of a small vessel, so such a declaration stays a finding rather than an excuse.
@@ -140,7 +152,11 @@ def review(
     status = np.where(
         explained,
         EXPLAINED,
-        np.where(~inside, OUTSIDE_SCENE, np.where(too_small, BELOW_DETECTABLE, UNDETECTED)),
+        np.where(
+            ~inside,
+            OUTSIDE_SCENE,
+            np.where(on_mask, MASKED, np.where(too_small, BELOW_DETECTABLE, UNDETECTED)),
+        ),
     )
     reviewed["status"] = pd.Series(status, index=reviewed.index, dtype="string")
 
@@ -161,6 +177,7 @@ def agreement(detections: gpd.GeoDataFrame, declarations: gpd.GeoDataFrame) -> A
         ais_only=int((declaration_status == UNDETECTED).sum()),
         outside_scene=int((declaration_status == OUTSIDE_SCENE).sum()),
         below_detectable=int((declaration_status == BELOW_DETECTABLE).sum()),
+        masked=int((declaration_status == MASKED).sum()),
     )
 
 

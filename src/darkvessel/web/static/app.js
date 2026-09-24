@@ -29,13 +29,14 @@
     unsearched: "Unsearched",
   };
 
-  /* The declaration side's verdicts. Only `undetected` is a finding; the other three say why
-     the radar's silence about a declared vessel means nothing. */
+  /* The declaration side's verdicts. Only `undetected` is a finding; the others say why the
+     radar's silence about a declared vessel means nothing. */
   const DECLARATION_TEXT = {
     explained: "Explained",
     undetected: "Undetected",
     below_detectable: "Below the detector's floor",
     outside_scene: "Outside the scene",
+    masked: "On masked land",
   };
 
   /* Each slider: the request field it drives, its URL key, and how its value reads. In static
@@ -1161,6 +1162,7 @@
         <dt><span class="pill pill-undetected">Undetected</span></dt><dd>${counts.undetected}</dd>
         <dt>Below the detector's floor</dt><dd class="${counts.below_detectable ? "" : "zero"}">${counts.below_detectable}</dd>
         <dt>Outside the scene</dt><dd class="${counts.outside_scene ? "" : "zero"}">${counts.outside_scene}</dd>
+        ${counts.masked ? `<dt>On masked land</dt><dd>${counts.masked}</dd>` : ""}
       </dl>
       ${undetected.length ? `<ul class="decl-list">${undetected
         .map((d) => `<li><strong>MMSI ${escapeHtml(d.mmsi)}</strong>

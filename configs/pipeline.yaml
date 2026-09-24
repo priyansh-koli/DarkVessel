@@ -39,3 +39,9 @@ geometry:
 #
 # The scene directory holds `scene.json` and either `image.npy` or a GeoTIFF named by
 # `"image": "<file>.tif"` in `scene.json`; a GeoTIFF is read one tile at a time.
+#
+# Land not to search: any vector file of land polygons (OSM land polygons, GSHHG, ...), in any
+# CRS. `land_buffer_m` pushes the mask out to sea, removing near-shore clutter and any vessel
+# moored within it. A declaration on the mask is reported `masked`, not `undetected`.
+# land_path: data/land/land_polygons.gpkg
+# land_buffer_m: 250

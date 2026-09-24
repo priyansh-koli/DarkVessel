@@ -20,6 +20,7 @@ import geopandas as gpd
 import pandas as pd
 
 from darkvessel.context.gee_layers import without_context
+from darkvessel.data.land import LandMask
 from darkvessel.data.provenance import attach_provenance
 from darkvessel.data.scene import Scene
 from darkvessel.data.tiling import Tiling
@@ -74,11 +75,16 @@ def run(
     coverage: Coverage | None = None,
     reception_floor: float = RECEPTION_FLOOR,
     smallest_detectable_m: float | None = SMALLEST_DETECTABLE_M,
+    land: LandMask | None = None,
 ) -> Fusion:
-    """Run the chain over one scene and return its detections, georeferenced and classified."""
+    """Run the chain over one scene and return its detections, georeferenced and classified.
+
+    `land`, when given, is not searched: see `data.land`.
+    """
+    mask = None if land is None or land.empty else land.mask_for(scene)
     return fuse(
         scene=scene,
-        found=detect_scene(scene.image, detector, tiling),
+        found=detect_scene(scene.image, detector, tiling, mask=mask),
         ais=ais,
         tolerance_m=tolerance_m,
         max_gap=max_gap,
@@ -88,6 +94,7 @@ def run(
         coverage=coverage,
         reception_floor=reception_floor,
         smallest_detectable_m=smallest_detectable_m,
+        land=land,
     )
 
 
@@ -104,6 +111,7 @@ def fuse(
     coverage: Coverage | None = None,
     reception_floor: float = RECEPTION_FLOOR,
     smallest_detectable_m: float | None = SMALLEST_DETECTABLE_M,
+    land: LandMask | None = None,
 ) -> Fusion:
     """Everything after detection: `found` is `detect_scene`'s pixel detections for `scene`.
 
@@ -113,6 +121,9 @@ def fuse(
     `coverage` is estimated from `ais` when it is not supplied. A caller re-running one scene
     many times should build it once with `fusion.reception.coverage_for` and pass it in: it
     depends only on the archive and `max_gap`, so rebuilding it per tolerance is wasted work.
+
+    `land` must be the mask `found` was detected under: it decides which declarations were
+    never searched for.
     """
     matched = classify(
         to_ground(found, scene), ais, scene.acquired_at, tolerance_m, max_gap, geometry
@@ -150,6 +161,7 @@ def fuse(
         scene.footprint,
         tolerance_m=tolerance_m,
         smallest_detectable_m=smallest_detectable_m,
+        masked=None if land is None else land.geometry,
     )
     if not declarations.empty:
         declarations["acquired_at"] = scene.acquired_at

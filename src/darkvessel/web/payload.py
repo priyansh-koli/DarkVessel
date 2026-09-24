@@ -26,6 +26,7 @@ import pandas as pd
 from shapely import Point
 
 from darkvessel.data.ais import clean
+from darkvessel.data.land import LandMask
 from darkvessel.data.scene import Scene
 from darkvessel.data.tiling import Tiling
 from darkvessel.detect.infer import detect_scene
@@ -35,6 +36,7 @@ from darkvessel.fusion.azimuth import Geometry
 from darkvessel.fusion.declarations import (
     BELOW_DETECTABLE,
     EXPLAINED,
+    MASKED,
     OUTSIDE_SCENE,
     SMALLEST_DETECTABLE_M,
     UNDETECTED,
@@ -91,8 +93,12 @@ class Viewer:
         reception_cell_m: float = RECEPTION_CELL_M,
         reception_min_intervals: int = MIN_INTERVALS,
         smallest_detectable_m: float | None = SMALLEST_DETECTABLE_M,
+        land: LandMask | None = None,
     ) -> None:
         self.scene = scene
+        # The same land the command-line run leaves unsearched, so the two never disagree.
+        self.land = None if land is None or land.empty else land
+        self._mask = None if self.land is None else self.land.mask_for(scene)
         self.reception_cell_m = float(reception_cell_m)
         self.reception_min_intervals = int(reception_min_intervals)
         self.smallest_detectable_m = smallest_detectable_m
@@ -141,6 +147,7 @@ class Viewer:
             coverage=coverage,
             reception_floor=request.reception_floor,
             smallest_detectable_m=self.smallest_detectable_m,
+            land=self.land,
         )
 
         return {
@@ -183,6 +190,7 @@ class Viewer:
             self.scene.image,
             BrightPixelDetector(threshold=threshold),
             Tiling(tile_px=tile_px, overlap_px=overlap_px),
+            mask=self._mask,
         )
         return found, crop_data_uris(self.scene.image, found[["row", "col"]])
 
@@ -366,6 +374,7 @@ def _declaration_counts(declarations: gpd.GeoDataFrame) -> dict:
         UNDETECTED: int(counts.get(UNDETECTED, 0)),
         BELOW_DETECTABLE: int(counts.get(BELOW_DETECTABLE, 0)),
         OUTSIDE_SCENE: int(counts.get(OUTSIDE_SCENE, 0)),
+        MASKED: int(counts.get(MASKED, 0)),
     }
 
 
@@ -377,6 +386,7 @@ def _agreement_summary(fusion) -> dict:
         "ais_only": found.ais_only,
         "outside_scene": found.outside_scene,
         "below_detectable": found.below_detectable,
+        "masked": found.masked,
         "apparent_recall": found.apparent_recall,
         "line": found.line(),
     }

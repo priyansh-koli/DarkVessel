@@ -447,6 +447,7 @@ def test_the_declaration_side_is_counted_and_listed(payload):
         "undetected": 2,
         "below_detectable": 1,
         "outside_scene": 1,
+        "masked": 0,
     }
     undetected = [d for d in payload["declarations"] if d["status"] == "undetected"]
     assert {d["mmsi"] for d in undetected} == {"219100001", "219100002"}
