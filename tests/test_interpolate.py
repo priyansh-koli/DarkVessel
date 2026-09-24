@@ -108,3 +108,46 @@ def test_empty_ais_gives_an_empty_answer_with_the_right_columns():
     assert result.empty
     assert result.crs == "EPSG:25832"
     assert set(result.columns) >= {"mmsi", "length_m", "position_basis", "position_age_s"}
+
+
+def test_rows_come_back_in_first_appearance_order_whatever_the_report_order():
+    """Reports arrive interleaved and out of time order; each vessel is still resolved from its
+    own sorted track, and vessels keep the order they first appear in."""
+    ais = _ais(
+        [
+            dict(mmsi="b", timestamp="2026-01-01T00:10:00Z", length_m=60.0, geometry=Point(600, 0)),
+            dict(mmsi="a", timestamp="2026-01-01T00:10:00Z", length_m=50.0, geometry=Point(0, 100)),
+            dict(mmsi="b", timestamp="2026-01-01T00:00:00Z", length_m=60.0, geometry=Point(0, 0)),
+            dict(mmsi="a", timestamp="2026-01-01T00:00:00Z", length_m=50.0, geometry=Point(0, 0)),
+        ]
+    )
+    result = positions_at(ais, pd.Timestamp("2026-01-01T00:05:00Z"), timedelta(minutes=30))
+    assert list(result["mmsi"]) == ["b", "a"]
+    assert result.geometry.iloc[0].x == pytest.approx(300.0)
+    assert result.geometry.iloc[1].y == pytest.approx(50.0)
+    assert list(result.index) == [0, 1]
+
+
+def test_reports_without_an_identity_are_skipped_and_do_not_shift_other_vessels():
+    """A vessel whose only report has no MMSI must vanish without misaligning the others."""
+    ais = _ais(
+        [
+            dict(mmsi="1", timestamp="2026-01-01T00:00:00Z", length_m=50.0, geometry=Point(0, 0)),
+            dict(mmsi=None, timestamp="2026-01-01T00:00:00Z", length_m=9.0, geometry=Point(5, 5)),
+            dict(mmsi="2", timestamp="2026-01-01T00:00:00Z", length_m=70.0, geometry=Point(9, 0)),
+            dict(mmsi="2", timestamp="2026-01-01T00:10:00Z", length_m=70.0, geometry=Point(9, 60)),
+        ]
+    )
+    result = positions_at(ais, pd.Timestamp("2026-01-01T00:05:00Z"), timedelta(minutes=30))
+    assert list(result["mmsi"]) == ["1", "2"]
+    assert list(result["position_basis"]) == [NEAREST, INTERPOLATED]
+    assert result.geometry.iloc[1].y == pytest.approx(30.0)
+    assert list(result["length_m"]) == [50.0, 70.0]
+
+
+def test_a_naive_acquisition_time_against_a_utc_archive_is_refused():
+    ais = _ais(
+        [dict(mmsi="1", timestamp="2026-01-01T00:00:00Z", length_m=50.0, geometry=Point(0, 0))]
+    )
+    with pytest.raises(TypeError):
+        positions_at(ais, pd.Timestamp("2026-01-01T00:00:00"), timedelta(minutes=30))
