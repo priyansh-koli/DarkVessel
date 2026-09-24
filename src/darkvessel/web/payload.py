@@ -424,13 +424,13 @@ def _coverage_digest(coverage: Coverage | None) -> str:
 
 def _latitude_of(scene: Scene) -> float:
     height, width = scene.image.shape
-    x, y = scene.transform * (width / 2, height / 2)
+    x, y = scene.transform @ (width / 2, height / 2)
     _, latitude = to_wgs84(str(scene.crs)).transform(x, y)
     return float(latitude)
 
 
 def _to_pixel(scene: Scene, x: float, y: float) -> dict:
-    col, row = ~scene.transform * (x, y)
+    col, row = ~scene.transform @ (x, y)
     return {"px": float(col), "py": float(row)}
 
 

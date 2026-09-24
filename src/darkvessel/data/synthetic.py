@@ -120,7 +120,7 @@ def _by_name(name: str) -> _Target:
 def _blob(image: np.ndarray, x: float, y: float, value: float = 1.0) -> None:
     """Paint a 2x2 block of equal-value pixels — the flat plateau `detect.stub` must collapse
     to one detection rather than reporting per pixel."""
-    col, row = ~TRANSFORM * (x, y)
+    col, row = ~TRANSFORM @ (x, y)
     r, c = int(row), int(col)
     image[r : r + 2, c : c + 2] = value
 

@@ -37,7 +37,7 @@ class Scene:
         """
         height, width = self.image.shape
         corners = ((0, 0), (width, 0), (width, height), (0, height))
-        return Polygon([self.transform * corner for corner in corners])
+        return Polygon([self.transform @ corner for corner in corners])
 
 
 def read_scene(directory: str | Path) -> Scene:

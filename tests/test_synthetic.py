@@ -48,7 +48,7 @@ def test_the_scene_carries_one_blob_per_target():
 def test_every_target_blob_sits_at_its_declared_ground_position():
     scene = _scene()
     for target in [_by_name(n) for n in ("stationary_match", "dark_vessel")]:
-        col, row = ~scene.transform * (target.x, target.y)
+        col, row = ~scene.transform @ (target.x, target.y)
         assert scene.image[int(row), int(col)] >= 0.5
 
 
@@ -99,7 +99,7 @@ def test_the_extra_targets_are_below_the_default_threshold():
     scene = _scene()
     for name in ("faint_trawler", "faint_dark"):
         target = _by_name(name)
-        col, row = ~scene.transform * (target.x, target.y)
+        col, row = ~scene.transform @ (target.x, target.y)
         assert 0.05 <= scene.image[int(row), int(col)] < 0.5
 
 

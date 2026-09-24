@@ -17,7 +17,7 @@ dependencies = [
     "pandas",
     "scipy",
     "rasterio",
-    "affine",
+    "affine>=3.0",  # `@` for transforms; `*` is deprecated from 3.0
     "geopandas",
     "pyogrio",
     "shapely",
