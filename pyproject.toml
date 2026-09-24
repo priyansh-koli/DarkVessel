@@ -42,6 +42,11 @@ darkvessel = ["web/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# pyproj 3.6 (the last release for Python 3.9) passes size-1 arrays to float(). Harmless: the
+# future NumPy error is a TypeError pyproj already catches — see test_dma's one-row test.
+filterwarnings = [
+    "ignore:Conversion of an array with ndim > 0 to a scalar:DeprecationWarning:pyproj",
+]
 
 [tool.ruff]
 line-length = 100

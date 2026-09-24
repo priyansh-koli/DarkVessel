@@ -70,3 +70,32 @@ def test_a_file_without_a_speed_column_simply_has_no_speed(tmp_path):
     )
     result = read_dma_csv(path, _CRS)
     assert "speed_ms" not in result.columns
+
+
+def test_a_one_row_file_survives_numpy_making_size_one_array_conversion_an_error(
+    tmp_path, monkeypatch
+):
+    """pyproj 3.6 converts a size-1 array to a float, which NumPy 1.25+ deprecates.
+
+    When NumPy turns that into an error it will be a TypeError, which pyproj catches and
+    retries on its array path. This simulates that future, so if pyproj ever stops catching
+    it, this fails here instead of on a real one-row file.
+    """
+    import warnings
+
+    def future_numpy(message, category, *args, **kwargs):
+        if category is DeprecationWarning and "ndim > 0 to a scalar" in str(message):
+            raise TypeError("only 0-dimensional arrays can be converted to Python scalars")
+
+    monkeypatch.setattr(warnings, "showwarning", future_numpy)
+    path = _csv(
+        tmp_path,
+        "# Timestamp,MMSI,Latitude,Longitude,Length,SOG\n"
+        "2026-08-09 05:31:24,219000001,55.7,9.0,140,12.0\n",
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("always")
+        result = read_dma_csv(path, _CRS)
+    back = gpd.GeoSeries(result.geometry, crs=_CRS).to_crs("EPSG:4326")
+    assert back.iloc[0].x == pytest.approx(9.0, abs=1e-6)
+    assert back.iloc[0].y == pytest.approx(55.7, abs=1e-6)

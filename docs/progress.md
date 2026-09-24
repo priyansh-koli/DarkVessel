@@ -20,7 +20,7 @@ Run from the project root:
 
 ```bash
 source .venv/bin/activate          # if missing: python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
-pytest -q                           # expect: 261 passed
+pytest -q                           # expect: 262 passed
 ruff check src/ tests/              # expect: All checks passed!
 darkvessel synthesise --out data/synthetic
 darkvessel run --config configs/pipeline.yaml
@@ -32,7 +32,7 @@ darkvessel run --config configs/pipeline.yaml
 ```
 
 Without the `detector` extra, 5 of those tests (the ones needing torch) are skipped, and pytest
-reports `256 passed, 5 skipped` — that is what CI shows, since it installs `.[dev]` only.
+reports `257 passed, 5 skipped` — that is what CI shows, since it installs `.[dev]` only.
 
 The detector, if the LS-SSDD data is in `data/lsssdd/` (see [models/README.md](../models/README.md)
 for the download):
@@ -62,10 +62,11 @@ darkvessel evaluate --detector cnn # expect: test_offshore F1 0.866, test F1 0.5
 | Analysis — archive-wide concentration analysis, static map | **Not started** |
 | Real data | **Training data only.** LS-SSDD-v1.0 (real Sentinel-1 chips, labelled) is in `data/lsssdd/` (7.8 GB zip + 2.7 GB extracted, git-ignored). The pipeline itself still runs only on the synthetic fixture: no real scene or DMA AIS file yet |
 
-- Tests: 261 passing locally (256 + 5 skipped in CI, which has no torch). Lint: clean.
+- Tests: 262 passing locally (257 + 5 skipped in CI, which has no torch). Lint: clean.
 - Git: `main` tracks `origin` = https://github.com/priyansh-koli/DarkVessel (public). Every push
-  to `main` runs CI and republishes the viewer. Working tree clean and in sync with `origin/main`;
-  last commit is `97abc44`, which published the detector, radar display and share fix.
+  to `main` runs CI and republishes the viewer. For the current commit and tree state, run
+  `git log --oneline -5` and `git status -sb`. This file deliberately records no hash, since
+  committing it would make the hash stale.
 - Python: the dev machine has only system Python 3.9.6, so the project targets `>=3.9`.
 
 ## Next steps
