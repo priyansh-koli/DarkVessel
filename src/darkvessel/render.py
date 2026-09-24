@@ -24,6 +24,7 @@ def stretch(image: np.ndarray, low_pct: float = 1.0, high_pct: float = 99.5) -> 
     otherwise push every vessel down into the noise floor. On a synthetic scene of mostly
     zeros both percentiles collapse to the same value, so min/max is used instead.
     """
+    image = np.asarray(image)  # a GeoTIFF-backed scene is read whole here
     finite = image[np.isfinite(image)]
     if finite.size == 0:
         return np.zeros(image.shape, dtype=np.uint8)
@@ -70,6 +71,7 @@ def crop_data_uris(
 
 
 def _limits(image: np.ndarray) -> tuple[float, float]:
+    image = np.asarray(image)
     finite = image[np.isfinite(image)]
     if finite.size == 0:
         return 0.0, 0.0
