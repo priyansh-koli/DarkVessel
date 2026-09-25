@@ -20,7 +20,7 @@ Run from the project root:
 
 ```bash
 source .venv/bin/activate          # if missing: python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
-pytest -q                           # expect: 262 passed
+pytest -q                           # expect: 263 passed
 ruff check src/ tests/              # expect: All checks passed!
 darkvessel synthesise --out data/synthetic
 darkvessel run --config configs/pipeline.yaml
@@ -32,7 +32,7 @@ darkvessel run --config configs/pipeline.yaml
 ```
 
 Without the `detector` extra, 5 of those tests (the ones needing torch) are skipped, and pytest
-reports `257 passed, 5 skipped` — that is what CI shows, since it installs `.[dev]` only.
+reports `258 passed, 5 skipped` — that is what CI shows, since it installs `.[dev]` only.
 
 The detector, if the LS-SSDD data is in `data/lsssdd/` (see [models/README.md](../models/README.md)
 for the download):
@@ -45,7 +45,7 @@ darkvessel evaluate --detector cnn # expect: test_offshore F1 0.866, test F1 0.5
 
 ---
 
-## Current state (as of 2026-09-24)
+## Current state (as of 2026-09-25)
 
 | Area | Status |
 |---|---|
@@ -53,16 +53,16 @@ darkvessel evaluate --detector cnn # expect: test_offshore F1 0.866, test F1 0.5
 | AIS reception — per-place estimate of whether the archive could have placed a transmitting vessel, and the `shadowed` status | **Done**, tested. Validated only against the synthetic fixture |
 | The declaration side — declarations no detection explains, and the label-free recall estimate | **Done**, tested. Written as a second GeoPackage layer |
 | AIS ingestion — DMA CSV reader and cleaning rules with per-rule counts | **Done**, tested against the format; not yet run on a real DMA day file |
-| Viewer — FastAPI live app + static bundle (every control baked), radar display, share panel, Guide and How it works pages | **Done**, every control checked in Chrome in both modes, at desktop and phone widths. The radar display and share panel are **not yet published** (see Git below) |
+| Viewer — FastAPI live app + static bundle (every control baked), radar display, share panel, Guide and How it works pages | **Done** and published. macOS-style chrome following the system's light or dark appearance. Every control checked in Chrome in both modes, at 320–1920 px, in both appearances; axe-core clean |
 | Deployment — CI, GitHub Pages | **Live.** CI green on 3.9 and 3.12; static viewer at https://priyansh-koli.github.io/DarkVessel/ |
 | Deployment — Dockerfile (live app) | **Written, never built** (no docker on the dev machine) |
 | Detector | `stub` (synthetic, the default), `cfar` baseline, `cnn` trained on LS-SSDD — see `models/README.md`. CNN beats CFAR offshore (F1 0.87 vs 0.69) and on AP, loses inshore (0.19 vs 0.28) until land is masked. Not yet run on a real georeferenced scene |
 | Tier 2 — Earth Engine export and contextual variables | **Not started** (`context/gee_layers.py` is a no-op) |
 | Tier 3 — CNN detector on LS-SSDD | **Done** (benchmarked); contrastive embeddings **not started** |
 | Analysis — archive-wide concentration analysis, static map | **Not started** |
-| Real data | **Training data only.** LS-SSDD-v1.0 (real Sentinel-1 chips, labelled) is in `data/lsssdd/` (7.8 GB zip + 2.7 GB extracted, git-ignored). The pipeline itself still runs only on the synthetic fixture: no real scene or DMA AIS file yet |
+| Real data | **Training data only.** LS-SSDD-v1.0 (real Sentinel-1 chips, labelled) is in `data/lsssdd/` (2.7 GB extracted, git-ignored; the zip is no longer kept). The pipeline itself still runs only on the synthetic fixture: no real scene or DMA AIS file yet |
 
-- Tests: 262 passing locally (257 + 5 skipped in CI, which has no torch). Lint: clean.
+- Tests: 263 passing locally (258 + 5 skipped in CI, which has no torch). Lint: clean.
 - Git: `main` tracks `origin` = https://github.com/priyansh-koli/DarkVessel (public). Every push
   to `main` runs CI and republishes the viewer. For the current commit and tree state, run
   `git log --oneline -5` and `git status -sb`. This file deliberately records no hash, since
@@ -171,6 +171,61 @@ In rough priority order — see [final-goal.md](final-goal.md) for why.
 ---
 
 ## Session log
+
+### 2026-09-25 — site audit by six agents, fixes, macOS look
+
+- **Audit.** Six test agents covered the site: functional, data correctness, accessibility,
+  responsive/visual, code/security/performance and content. They found 12 major and about 45
+  minor issues. Confirmed correct: static and live results agree at every position sampled,
+  the bake is complete (17,600 positions, 3,606 runs), the payload matches `darkvessel run`,
+  and there is no XSS or path traversal.
+- **Fixed (wrong or misleading results).**
+  - Static-build race: a superseded refresh aborted a cached fetch that the next refresh
+    awaited, leaving stale results under a moved slider.
+  - The viewer ignored the config's `geometry`.
+  - The guide's tour pointed at the wrong detections.
+  - Reduced motion hid moving contacts at opacity 0.
+  - A click on a drifted marker missed the detection.
+  - Smaller text errors:
+    - an unknown azimuth shift was shown as "0.0 m" (now `null`);
+    - a matched detection's note said "Reported dark";
+    - the AIS panel showed no declaration count when there were no detections;
+    - the selection slid onto another vessel after a control change.
+- **Fixed (layout, accessibility).**
+  - Layout:
+    - sticky controls covered the inspector at 1024–1400 px;
+    - the share panel opened off-screen on phones;
+    - the About table was clipped on phones;
+    - the sticky toolbar took up to 44% of a phone's height.
+  - Keyboard and screen reader:
+    - structure registration now works from the keyboard;
+    - sliders announce values, not grid indices;
+    - focus pans into view when zoomed.
+  - Status no longer depends on colour alone (hollow, dashed and hatched shapes). Touch targets
+    are 44 px, and faded markers and rows meet contrast.
+- **macOS look.** `styles.css` is rewritten on macOS system tokens: light and dark follow the
+  system appearance, with a translucent toolbar and decorative traffic lights, segmented
+  controls, Mac sliders, switches and buttons. The scene stays a dark display with its own
+  palette in both appearances. Dark mode uses `#0a74e0` for filled accents, since the system's
+  `#0a84ff` carries white text at only 3.6:1.
+- **Housekeeping.** Cleared about 584 MB: the pip cache (578 MB, outside the repo), unused
+  `torchvision`, and the test and lint caches. A pyproj/NumPy size-1 array deprecation
+  was shown harmless and is pinned by a test (`test_dma`).
+- **Verified:** 263 tests pass and ruff is clean at every one of the seven commits. Browser
+  checks passed for every fix: a race replay with 800 ms delayed fetches, every tour link,
+  reduced motion, keyboard registration, focus panning, and share and table placement at
+  320–740 px. axe-core found 0 violations across 32 page, state, width and appearance
+  combinations.
+- **Left undone:**
+  - Tooltips don't dismiss on Esc.
+  - The inspector's Next button moves focus to Previous.
+  - Focus is lost after the filter cards.
+  - README still says 241 tests and lists the land mask as not built.
+  - `pipeline.svg` lacks the `masked` verdict.
+  - `render` doesn't clear stale run files.
+  - The motion animation still draws markers away from their measured positions while
+    it plays.
+
 
 ### 2026-09-24 — real-scene reading, land mask, faster CFAR and AIS interpolation
 

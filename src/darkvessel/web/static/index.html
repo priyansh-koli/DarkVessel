@@ -245,16 +245,18 @@
       <h2 class="panel-title">Key</h2>
       <ul class="legend" aria-label="Legend">
       <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><path class="g-matched" d="M0 -9 L4.5 -2 L4.5 7 L-4.5 7 L-4.5 -2 Z"/></svg>Matched — hull points along its AIS course</li>
+      <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><circle class="g-matched" r="5"/></svg>Matched, no AIS course — a solid ring</li>
       <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><path class="g-dark" d="M0 -8 L8 0 L0 8 L-8 0 Z"/></svg>Dark — searched, nothing explains it</li>
-      <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><path class="g-shadowed" d="M0 -8 L8 0 L0 8 L-8 0 Z"/></svg>Shadowed — dark, but the AIS archive could not have heard it here</li>
+      <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><path class="g-shadowed" d="M0 -8 L8 0 L0 8 L-8 0 Z"/><path class="g-shadowed g-detail" d="M-4 0 L4 0"/></svg>Shadowed — dark, but the AIS archive could not have heard it here</li>
       <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><rect class="g-structure" x="-6" y="-6" width="12" height="12"/></svg>Structure — a registered fixed position</li>
-      <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><circle class="g-unsearched" r="5"/></svg>Unsearched — no AIS supplied</li>
+      <li><svg class="key-glyph" viewBox="-10 -10 20 20" aria-hidden="true"><circle class="g-unsearched" r="5" stroke-dasharray="2 2"/></svg>Unsearched — no AIS supplied, a dashed ring</li>
       <li><span class="key key-vector" aria-hidden="true"></span>Speed vector — 20 seconds ahead</li>
       <li><span class="key key-decl" aria-hidden="true"></span>AIS declaration</li>
       <li><span class="key key-shift" aria-hidden="true"></span>Azimuth shift applied</li>
       <li><span class="key key-tol" aria-hidden="true"></span>Match tolerance around a declaration</li>
       <li><span class="key key-undetected" aria-hidden="true"></span>Undetected declaration — AIS says a vessel is here, the radar drew nothing</li>
       <li><span class="key key-shadow" aria-hidden="true"></span>Reception shadow — water the archive hears poorly</li>
+      <li><span class="key key-shadow-unknown" aria-hidden="true"></span>Reception not measured — hatched</li>
       <li><span class="key key-trail" aria-hidden="true"></span>Track — contacts move at their declared course and speed; dark contacts drift at an assumed speed</li>
       </ul>
     </section>

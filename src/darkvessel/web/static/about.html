@@ -168,6 +168,7 @@
     sea state and often the same ships, so a random split would leak. Each detector's threshold
     is chosen on validation and applied unchanged to the official test scenes.</p>
 
+  <div class="table-scroll" role="region" aria-label="Detector performance table" tabindex="0">
   <table class="shortcuts">
     <caption class="sr-only">Detector performance on the LS-SSDD test scenes, comparing the
       classical CFAR baseline with the trained CNN, split by inshore and offshore.</caption>
@@ -192,6 +193,7 @@
       <tr><td>CNN</td><td>0.444</td><td><strong>0.692</strong></td><td>0.541</td><td><strong>0.626</strong></td></tr>
     </tbody>
   </table>
+  </div>
   <p class="table-note">The baseline is two-parameter CA-CFAR, the classical radar detector,
     with its windows and threshold tuned on the same validation scenes. A prediction counts as
     a hit when it falls inside a ship's box, paired one-to-one by optimal assignment — the same

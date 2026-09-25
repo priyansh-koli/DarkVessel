@@ -699,6 +699,14 @@
     const defs = el("defs");
     defs.append(el("clipPath", { id: "scene-clip" }));
     defs.firstChild.append(el("rect", { x: 0, y: 0, width: scene.width, height: scene.height }));
+    // Unmeasured water is hatched rather than only tinted, so it is told from poorly heard
+    // water by pattern as well as colour.
+    const hatch = el("pattern", {
+      id: "rx-hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse",
+      patternTransform: "rotate(45)",
+    });
+    hatch.append(el("rect", { x: 0, y: 0, width: 2, height: 6, fill: "#a1a1a6" }));
+    defs.append(hatch);
     svg.append(defs);
     const reception = group(svg, "reception");
     reception.setAttribute("clip-path", "url(#scene-clip)");
@@ -1178,7 +1186,7 @@
           y: cell.py,
           width: cell.pw,
           height: cell.ph,
-          "fill-opacity": (measured ? 0.1 + 0.32 * shortfall : 0.1).toFixed(3),
+          "fill-opacity": (measured ? 0.1 + 0.32 * shortfall : 0.55).toFixed(3),
         })
       );
     }
