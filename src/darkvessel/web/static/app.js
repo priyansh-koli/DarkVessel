@@ -326,7 +326,7 @@
   async function load(signal) {
     if (state.source === "live") return getJson(`api/run?${liveQuery()}`, signal);
     if (state.source === "snapshot") return getJson("data/run.json", signal);
-    return bakedPayload(signal);
+    return bakedPayload();
   }
 
   async function getJson(url, signal) {
@@ -350,7 +350,7 @@
   }
 
   /** The baked result for the current controls, with the register applied on top. */
-  async function bakedPayload(signal) {
+  async function bakedPayload() {
     const { manifest } = state;
     const r = request();
     let flat = 0;
@@ -359,16 +359,13 @@
       flat = flat * values.length + values.indexOf(r[key]);
     }
     const id = manifest.runs[flat];
-    if (!state.runs.has(id)) {
-      const pending = getJson(`data/runs/${id}.json`, signal);
-      state.runs.set(id, pending);
-      pending.catch(() => state.runs.delete(id));
-    }
-    const base = await state.runs.get(id);
+    // Both files are requested at once: the reception file does not depend on the run.
+    const reception = bakedReception(r.max_gap_minutes);
+    const base = await cachedJson(state.runs, id, `data/runs/${id}.json`);
 
     const payload = {
       ...base,
-      reception: await bakedReception(r.max_gap_minutes, signal),
+      reception: await reception,
       detections: base.detections.map((d) => ({ ...d })),
       register: state.register.map((p) => ({ ...p, ...groundToPixel(base.scene, p.x, p.y) })),
       config: {
@@ -415,19 +412,27 @@
 
   /** The reception model for a max gap. `darkvessel render` writes one file per gap class
       rather than a copy inside every run that shares one, so this is a second lazy fetch. */
-  async function bakedReception(maxGapMinutes, signal) {
+  function bakedReception(maxGapMinutes) {
     const index = state.manifest.reception;
     if (!index) return null;
     // Positional, by the gap's place in its own grid — the same lookup the runs use. Keying
     // by the gap's value would mean matching a JSON number against a string Python formatted.
     const id = index[state.manifest.grid.max_gap_minutes.indexOf(maxGapMinutes)];
     if (id === undefined || id === null) return null;
-    if (!state.receptionRuns.has(id)) {
-      const pending = getJson(`data/reception/${id}.json`, signal);
-      state.receptionRuns.set(id, pending);
-      pending.catch(() => state.receptionRuns.delete(id));
+    return cachedJson(state.receptionRuns, id, `data/reception/${id}.json`);
+  }
+
+  /** One shared request per baked file. It takes no abort signal on purpose: neighbouring
+      control positions share a file, so the refresh that superseded this one may be waiting
+      on the same request, and aborting it would leave that refresh with nothing to render.
+      `refresh` already ignores a result that arrives after it was superseded. */
+  function cachedJson(cache, id, url) {
+    if (!cache.has(id)) {
+      const pending = getJson(url);
+      cache.set(id, pending);
+      pending.catch(() => cache.delete(id));
     }
-    return state.receptionRuns.get(id);
+    return cache.get(id);
   }
 
   function countStatuses(detections) {
