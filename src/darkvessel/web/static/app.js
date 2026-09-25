@@ -135,8 +135,9 @@
 
   function receptionTitle(d) {
     if (isAbsent(d.reception_p)) {
+      // Only a dark row rests on the search alone; a matched one never needed the estimate.
       return `No reception estimate here: ${d.reception_intervals ?? 0} report interval(s) ` +
-        `nearby, too few to say. Reported dark on the search alone.`;
+        `nearby, too few to say.` + (d.status === "dark" ? " Reported dark on the search alone." : "");
     }
     return `An AIS report would have placed a vessel here at the acquisition instant about ` +
       `${Math.round(d.reception_p * 100)}% of the time, from ${d.reception_intervals} ` +
@@ -298,6 +299,7 @@
     try {
       const payload = await load(controller.signal);
       if (controller.signal.aborted) return;
+      followSelection(state.payload, payload);
       state.payload = payload;
       state.failed = false;
       setMode();
@@ -321,6 +323,16 @@
         els.modeBadge.classList.remove("is-busy");
       }
     }
+  }
+
+  /** Detection numbers are positions in a list that changes with the controls, so keep the
+      selection on the same contact — by where it is — or drop it, never slide it onto another. */
+  function followSelection(before, after) {
+    if (state.selected === null || !before) return;
+    const was = before.detections.find((d) => d.index === state.selected);
+    if (!was) return;
+    const same = after.detections.find((d) => Math.hypot(d.x - was.x, d.y - was.y) < 1);
+    state.selected = same ? same.index : null;
   }
 
   async function load(signal) {
@@ -533,7 +545,7 @@
     renderCounts(data.counts);
     renderTable(data.detections);
     renderOverlay(data);
-    renderAis(data.ais, data.detections, data.reception);
+    renderAis(data.ais, data.detections, data.reception, data.declaration_counts);
     renderDeclarations(data);
     renderRegister();
     renderInspector();
@@ -648,7 +660,7 @@
           <td class="${d.mmsi ? "" : "muted"}">${d.mmsi ? escapeHtml(d.mmsi) : "—"}</td>
           <td class="right ${isAbsent(d.match_distance_m) ? "muted" : ""}">${fmtM(d.match_distance_m, 1)}</td>
           <td class="${d.position_basis ? "" : "muted"}">${d.position_basis ? escapeHtml(d.position_basis) : "—"}</td>
-          <td class="right ${d.azimuth_shift_m ? "" : "muted"}">${fmtM(d.azimuth_shift_m, 0)}</td>
+          <td class="right ${d.azimuth_shift_m > 0.5 ? "" : "muted"}">${fmtM(d.azimuth_shift_m, 0)}</td>
           <td class="right ${isAbsent(d.reception_p) ? "muted" : ""}"
               title="${escapeHtml(receptionTitle(d))}">${fmtReception(d)}</td>
         </tr>`;
@@ -1189,15 +1201,16 @@
       spoofed declaration counts against the detector although nothing was there to find.</p>`}`;
   }
 
-  function renderAis(ais, detections, reception) {
+  function renderAis(ais, detections, reception, declarationCounts) {
     if (!ais) {
       els.aisSummary.innerHTML =
         `<p class="hint" style="margin:0">No AIS archive is configured, so nothing was searched. Every detection is <em>unsearched</em> rather than dark.</p>`;
       return;
     }
 
+    // From the declaration side, which exists even when no detection does to carry the count.
     const declared = detections.find((d) => !isAbsent(d.declarations_searched));
-    const searched = declared ? declared.declarations_searched : null;
+    const searched = declarationCounts?.total ?? (declared ? declared.declarations_searched : null);
     const rules = Object.entries(ais.removed);
 
     els.aisSummary.innerHTML = `

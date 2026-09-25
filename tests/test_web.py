@@ -83,15 +83,17 @@ def test_absent_values_arrive_as_null_not_nan(payload):
 
 def test_declarations_carry_both_the_raw_and_the_drawn_position(payload):
     """The gap between the two is the azimuth correction the viewer draws as a dashed line."""
-    moving = next(d for d in payload["declarations"] if d["azimuth_shift_m"] > 1.0)
+    moving = next(d for d in payload["declarations"] if (d["azimuth_shift_m"] or 0) > 1.0)
     assert moving["mmsi"] == "219000003"
     assert moving["raw"]["px"] != moving["drawn"]["px"]
     assert moving["matched_index"] is not None
 
 
-def test_a_stationary_declaration_is_drawn_where_it_declared(payload):
+def test_a_declaration_without_velocity_is_drawn_where_it_declared(payload):
+    """No velocity means no shift was computed: it is drawn in place, and its shift is
+    unknown (None), not a measured 0 m."""
     still = next(d for d in payload["declarations"] if d["mmsi"] == "219000001")
-    assert still["azimuth_shift_m"] == pytest.approx(0.0, abs=1e-6)
+    assert still["azimuth_shift_m"] is None
     assert still["raw"]["px"] == pytest.approx(still["drawn"]["px"])
 
 
@@ -490,7 +492,7 @@ def test_the_configured_geometry_drives_the_azimuth_correction():
     shifted = [
         (d["azimuth_shift_m"], s["azimuth_shift_m"])
         for d, s in zip(default["declarations"], shorter["declarations"])
-        if d["azimuth_shift_m"] > 1
+        if (d["azimuth_shift_m"] or 0) > 1
     ]
     assert shifted
     for full, short in shifted:

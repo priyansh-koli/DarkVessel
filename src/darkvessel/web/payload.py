@@ -233,6 +233,9 @@ class Viewer:
         for position, (index, row) in enumerate(declared.iterrows()):
             raw = row.geometry
             east, north = 0.0, 0.0
+            # None, not 0, when no shift was computed (correction off, or no velocity): a zero
+            # would claim the vessel was measured to stand still.
+            shift = None
             if (
                 geometry is not None
                 and np.isfinite(row["velocity_east_ms"])
@@ -241,6 +244,7 @@ class Viewer:
                 east, north = geometry.displacement(
                     row["velocity_east_ms"], row["velocity_north_ms"], self._latitude
                 )
+                shift = float(np.hypot(east, north))
             drawn = Point(raw.x + east, raw.y + north)
             verdict = verdicts.loc[index]
             rows.append(
@@ -250,7 +254,7 @@ class Viewer:
                     "position_basis": _plain(row["position_basis"]),
                     "position_age_s": _plain(row["position_age_s"]),
                     "position_span_s": _plain(row["position_span_s"]),
-                    "azimuth_shift_m": float(np.hypot(east, north)),
+                    "azimuth_shift_m": shift,
                     **_course_and_speed(row["velocity_east_ms"], row["velocity_north_ms"]),
                     "status": _plain(verdict["status"]),
                     "nearest_detection_m": _plain(verdict["nearest_detection_m"]),
