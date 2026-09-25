@@ -7,6 +7,14 @@
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const scrollBehavior = () => (reduceMotion.matches ? "auto" : "smooth");
 
+  /* The sticky columns sit just under the header, whose height changes as it wraps. */
+  const topbar = document.querySelector(".topbar");
+  if (topbar && "ResizeObserver" in window) {
+    new ResizeObserver(() => {
+      document.documentElement.style.setProperty("--topbar-h", `${topbar.offsetHeight}px`);
+    }).observe(topbar);
+  }
+
   /* ── Self-linking headings ──────────────────────────────────────────────
      A real anchor, not a ::before, so it is reachable by keyboard and announced. */
   const headings = Array.from(document.querySelectorAll(".doc h2[id], .doc h3[id]"));
@@ -74,6 +82,8 @@
      same case the viewer's Share panel handles, so fall back to a selection the reader can
      copy themselves rather than reporting a success that did not happen. */
   for (const pre of document.querySelectorAll(".doc pre")) {
+    // A long line scrolls sideways on a phone; a keyboard user must be able to reach it too.
+    pre.tabIndex = 0;
     const code = pre.querySelector("code");
     if (!code) continue;
 

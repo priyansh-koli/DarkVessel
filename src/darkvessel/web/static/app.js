@@ -168,10 +168,21 @@
     return best;
   }
 
+  /** Show a slider's value beside it and to assistive tech. In the static build the input
+      holds a grid index, so without aria-valuetext a screen reader would read "7", not "200 m". */
+  function showValue(id) {
+    const input = $(id);
+    const text = SLIDERS[id].fmt(sliderValue(id));
+    $(`${id}-out`).textContent = text;
+    input.setAttribute("aria-valuetext", text);
+    // How far along the track the knob sits, for the filled part of the track.
+    const [min, max] = [Number(input.min), Number(input.max)];
+    const pct = max > min ? ((Number(input.value) - min) / (max - min)) * 100 : 0;
+    input.style.setProperty("--pct", `${pct}%`);
+  }
+
   function syncOutputs() {
-    for (const [id, spec] of Object.entries(SLIDERS)) {
-      $(`${id}-out`).textContent = spec.fmt(sliderValue(id));
-    }
+    for (const id of Object.keys(SLIDERS)) showValue(id);
   }
 
   function request() {
@@ -207,7 +218,17 @@
 
   /* ───────────────────────── boot: find a source ───────────────────────── */
 
+  function trackTopbar() {
+    const topbar = document.querySelector(".topbar");
+    if (topbar && "ResizeObserver" in window) {
+      new ResizeObserver(() => {
+        document.documentElement.style.setProperty("--topbar-h", `${topbar.offsetHeight}px`);
+      }).observe(topbar);
+    }
+  }
+
   async function boot() {
+    trackTopbar();
     bindControls();
     bindStage();
     bindDelegatedClicks();
@@ -1460,8 +1481,16 @@
       if (mark && (event.key === "Enter" || event.key === " ")) {
         event.preventDefault();
         event.stopPropagation();
-        select(Number(mark.dataset.index));
+        // While placing, Enter registers the focused detection — the keyboard's way to do
+        // what a click on it does.
+        if (state.placing) registerDetection(Number(mark.dataset.index));
+        else select(Number(mark.dataset.index));
       }
+    });
+    // Tabbing to a detection outside the zoomed view brings it into view.
+    els.overlay.addEventListener("focusin", (event) => {
+      const mark = event.target.closest(".mark");
+      if (mark) panIntoView(mark);
     });
 
     els.inspector.addEventListener("click", (event) => {
@@ -1554,6 +1583,36 @@
     applyTransform();
   }
 
+  function addRegister(point) {
+    state.register.push(point);
+    setPlacing(false);
+    renderRegister();
+    refresh();
+  }
+
+  function registerDetection(index) {
+    const detection = state.payload?.detections.find((d) => d.index === index);
+    if (detection) addRegister({ x: detection.x, y: detection.y });
+  }
+
+  function panIntoView(node) {
+    // Focus can scroll the clipped stage itself; the view is driven by pan alone.
+    els.stage.scrollLeft = 0;
+    els.stage.scrollTop = 0;
+    if (state.zoom <= 1) return;
+    const stage = els.stage.getBoundingClientRect();
+    const box = node.getBoundingClientRect();
+    const margin = 24;
+    const inside =
+      box.left >= stage.left + margin && box.right <= stage.right - margin &&
+      box.top >= stage.top + margin && box.bottom <= stage.bottom - margin;
+    if (inside) return;
+    state.pan.x += stage.left + stage.width / 2 - (box.left + box.width / 2);
+    state.pan.y += stage.top + stage.height / 2 - (box.top + box.height / 2);
+    constrainPan();
+    applyTransform();
+  }
+
   function constrainPan() {
     const { w, h } = state.base;
     const overflowX = w * state.zoom - w;
@@ -1624,13 +1683,12 @@
       // A marker is drawn dead-reckoned away from where it was detected, so a click on one
       // registers the detection's measured position, not the point under the pointer.
       const mark = event.target.closest(".mark");
-      const detection = mark && state.payload?.detections[Number(mark.dataset.index)];
-      const point = detection ? { x: detection.x, y: detection.y } : scenePointFromEvent(event);
-      if (!point) return;
-      state.register.push(point);
-      setPlacing(false);
-      renderRegister();
-      refresh();
+      if (mark) {
+        registerDetection(Number(mark.dataset.index));
+        return;
+      }
+      const point = scenePointFromEvent(event);
+      if (point) addRegister(point);
     });
 
     els.stage.addEventListener("keydown", (event) => {
@@ -1705,7 +1763,7 @@
     els.addStructure.setAttribute("aria-pressed", String(on));
     els.stage.classList.toggle("is-placing", on);
     els.addStructure.lastChild.textContent = on
-      ? " Click the scene — Esc to cancel"
+      ? " Click the scene or a detection (Enter) — Esc to cancel"
       : " Register by clicking the scene";
   }
 
@@ -1953,11 +2011,9 @@
   /* ───────────────────────── controls ───────────────────────── */
 
   function bindControls() {
-    for (const [id, spec] of Object.entries(SLIDERS)) {
-      const input = $(id);
-      const output = $(`${id}-out`);
-      input.addEventListener("input", () => {
-        output.textContent = spec.fmt(sliderValue(id));
+    for (const id of Object.keys(SLIDERS)) {
+      $(id).addEventListener("input", () => {
+        showValue(id);
         // The register is applied in the browser in static mode, and re-run live otherwise.
         controlsChanged();
       });
