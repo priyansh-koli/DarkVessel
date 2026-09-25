@@ -277,6 +277,7 @@ def _render(config_path: Path, out_dir: Path) -> int:
         reception_min_intervals=cfg.reception_min_intervals,
         smallest_detectable_m=cfg.smallest_detectable_m,
         land=LandMask.read(cfg.land_path, scene, cfg.land_buffer_m) if cfg.land_path else None,
+        geometry=cfg.geometry,
     )
     default = RunRequest(
         tolerance_m=cfg.tolerance_m,

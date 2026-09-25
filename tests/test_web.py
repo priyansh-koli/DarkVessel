@@ -471,3 +471,29 @@ def test_run_honours_the_reception_floor_query(client):
 
 def test_an_out_of_range_reception_floor_is_refused(client):
     assert client.get("/api/run", params={"reception_floor": 1.5}).status_code == 422
+
+
+def test_the_configured_geometry_drives_the_azimuth_correction():
+    """The viewer corrects with the configured geometry, as `darkvessel run` does, not the
+    scene's defaults. A shorter `shift_per_mps` shrinks every shift in proportion."""
+    from darkvessel.fusion.azimuth import Geometry
+
+    scene = _scene()
+    default = _viewer().run(_request())
+    shorter = Viewer(
+        scene,
+        _ais(),
+        reception_cell_m=RECEPTION_CELL_M,
+        geometry=Geometry(scene.heading_deg, scene.incidence_deg, shift_per_mps=60.0),
+    ).run(_request())
+
+    shifted = [
+        (d["azimuth_shift_m"], s["azimuth_shift_m"])
+        for d, s in zip(default["declarations"], shorter["declarations"])
+        if d["azimuth_shift_m"] > 1
+    ]
+    assert shifted
+    for full, short in shifted:
+        assert short == pytest.approx(full * 60.0 / 113.0, rel=1e-6)
+    # The fast vessel's drawn position no longer reaches its detection, as on the command line.
+    assert (shorter["counts"]["matched"], shorter["counts"]["dark"]) == (3, 2)

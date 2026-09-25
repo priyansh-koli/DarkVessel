@@ -94,8 +94,14 @@ class Viewer:
         reception_min_intervals: int = MIN_INTERVALS,
         smallest_detectable_m: float | None = SMALLEST_DETECTABLE_M,
         land: LandMask | None = None,
+        geometry: Geometry | None = None,
     ) -> None:
         self.scene = scene
+        # The configured acquisition geometry, so the azimuth toggle corrects exactly as the
+        # command-line run does. Left out, the scene's own heading and incidence stand in.
+        self.geometry = geometry or Geometry(
+            heading_deg=scene.heading_deg, incidence_deg=scene.incidence_deg
+        )
         # The same land the command-line run leaves unsearched, so the two never disagree.
         self.land = None if land is None or land.empty else land
         self._mask = None if self.land is None else self.land.mask_for(scene)
@@ -127,11 +133,7 @@ class Viewer:
         """Run the chain under `request` and return everything the viewer needs to draw it."""
         scene = self.scene
         max_gap = timedelta(minutes=request.max_gap_minutes)
-        geometry = (
-            Geometry(heading_deg=scene.heading_deg, incidence_deg=scene.incidence_deg)
-            if request.apply_azimuth
-            else None
-        )
+        geometry = self.geometry if request.apply_azimuth else None
         register = _register(request)
         found, crops = self._detect(request.detector_threshold, request.tile_px, request.overlap_px)
         coverage = self._coverage(request.max_gap_minutes)

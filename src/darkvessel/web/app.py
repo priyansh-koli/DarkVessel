@@ -36,6 +36,7 @@ def create_app(config_path: str | Path) -> FastAPI:
         reception_min_intervals=cfg.reception_min_intervals,
         smallest_detectable_m=cfg.smallest_detectable_m,
         land=LandMask.read(cfg.land_path, scene, cfg.land_buffer_m) if cfg.land_path else None,
+        geometry=cfg.geometry,
     )
     # The viewer re-runs the stand-in detector, so it uses the configured tiling or the
     # stand-in's default, never the configured detector's preference.
