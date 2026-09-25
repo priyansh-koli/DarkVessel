@@ -940,7 +940,11 @@
   function applyMotion() {
     const t = simSeconds();
     const intoLoop = motion.elapsed % MOTION_LOOP_SECONDS;
-    const fade = Math.min(1, intoLoop / MOTION_FADE_SECONDS, (MOTION_LOOP_SECONDS - intoLoop) / MOTION_FADE_SECONDS);
+    // The fade only hides the loop's join while time runs. Stopped — paused, or never started
+    // under reduced motion — every contact is drawn in full wherever it stands.
+    const fade = motion.running
+      ? Math.min(1, intoLoop / MOTION_FADE_SECONDS, (MOTION_LOOP_SECONDS - intoLoop) / MOTION_FADE_SECONDS)
+      : 1;
     for (const node of els.overlay.querySelectorAll(".is-moving")) {
       const dx = Number(node.dataset.vx) * t;
       const dy = Number(node.dataset.vy) * t;
@@ -972,6 +976,7 @@
       motion.last = performance.now();
       motion.frame = requestAnimationFrame(tickMotion);
     }
+    applyMotion();
   }
 
   /** Range rings around the scene centre, bearing ticks, and a north mark. */
@@ -1603,7 +1608,11 @@
 
     els.stage.addEventListener("click", (event) => {
       if (!state.placing || state.dragged) return;
-      const point = scenePointFromEvent(event);
+      // A marker is drawn dead-reckoned away from where it was detected, so a click on one
+      // registers the detection's measured position, not the point under the pointer.
+      const mark = event.target.closest(".mark");
+      const detection = mark && state.payload?.detections[Number(mark.dataset.index)];
+      const point = detection ? { x: detection.x, y: detection.y } : scenePointFromEvent(event);
       if (!point) return;
       state.register.push(point);
       setPlacing(false);
