@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Guide — darkvessel</title>
-<meta name="description" content="A two-minute tour of the darkvessel viewer: what each control does, what each status means, and five one-click scenarios.">
+<meta name="description" content="A two-minute tour of the darkvessel viewer: what each control does, what each status means, and seven one-click scenarios.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🛰️</text></svg>">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -48,46 +48,48 @@
       <h3>Read a verdict</h3>
       <p>Select any box on the scene or row in the table. The inspector on the right says, in
         words, which declaration explained it, how far apart they were, and what the position
-        rests on. Detection 2's position was <em>interpolated</em> between two reports. Its
+        rests on. Detection 3's position was <em>interpolated</em> between two reports. Its
         nearest single report sits about 900 m away, far enough on its own to call it dark.</p>
-      <p><a class="try" href="./?select=2">Open detection 2 →</a></p>
+      <p><a class="try" href="./?select=3">Open detection 3 →</a></p>
     </li>
     <li>
       <h3>Switch off the azimuth correction</h3>
       <p>Radar draws a moving ship displaced along the satellite's track. The dashed orange
-        line shows that shift. Turn the correction off and detection 3, the fast vessel,
+        line shows that shift. Turn the correction off and detection 2, the fast vessel,
         falls out of tolerance: 4 matched / 1 dark becomes 3 matched / 2 dark.</p>
-      <p><a class="try" href="./?az=0&amp;select=3">See detection 3 go dark →</a></p>
+      <p><a class="try" href="./?az=0&amp;select=2">See detection 2 go dark →</a></p>
     </li>
     <li>
       <h3>See why the dark vessel stays dark</h3>
-      <p>Detection 5 has a declaration only 170 m away, inside the 200 m tolerance. It's still
-        dark because matching is one-to-one: that declaration fits detection 4 better (30 m).
+      <p>Detection 4 has a declaration only about 130 m away, inside the 200 m tolerance. It's
+        still dark because matching is one-to-one: that declaration fits detection 5 better
+        (about 70 m).
         A greedy matcher that let one declaration explain two ships would hide this vessel.</p>
-      <p><a class="try" href="./?select=5">Open detection 5 →</a></p>
+      <p><a class="try" href="./?select=4">Open detection 4 →</a></p>
     </li>
     <li>
       <h3>Tighten the tolerance</h3>
-      <p>At 25 m, detection 4's declaration (about 30 m off) no longer counts. A dark count
-        always comes with the tolerance it was measured at, and the table and inspector
-        both show it.</p>
-      <p><a class="try" href="./?tol=25&amp;select=4">Try a 25 m tolerance →</a></p>
+      <p>At 25 m, detection 5's declaration (about 70 m off) and detection 1's (about 130 m)
+        no longer count. Detection 1 turns dark; detection 5 turns <em>shadowed</em>, because
+        reception there is too poor for its silence to mean much. A dark count always comes
+        with the tolerance it was measured at, and the inspector shows it.</p>
+      <p><a class="try" href="./?tol=25&amp;select=5">Try a 25 m tolerance →</a></p>
     </li>
     <li>
       <h3>Register a fixed structure</h3>
       <p>Turbines and platforms show up on every pass. Select <em>Register by clicking the
         scene</em>, then click a dark detection. It turns <em>structure</em>, and no matched
         vessel is ever touched: structure exclusion runs after matching.</p>
-      <p><a class="try" href="./?reg=500900.0,6100900.0&amp;select=5">Register one under detection 5 →</a></p>
+      <p><a class="try" href="./?reg=500940.0,6099895.0&amp;select=4">Register one under detection 4 →</a></p>
     </li>
     <li>
       <h3>Ask whether the search could have heard</h3>
-      <p>Lower the brightness threshold to 0.30 and two more contacts appear. One is reported
-        <em>dark</em>; the other is <em>shadowed</em>, because the only vessel near it is heard
-        once an hour, so the archive would have placed a transmitting vessel there barely a
-        third of the time. Switch on <em>Show reception shadows</em> to see the water this
-        applies to. A third contact nearby has no estimate at all and stays dark — an absence
-        of evidence is never treated as evidence of absence.</p>
+      <p>Lower the brightness threshold to 0.30 and two more contacts appear. One is
+        <em>shadowed</em>, because the only vessel near it is heard once an hour, so the
+        archive would have placed a transmitting vessel there barely a third of the time.
+        Switch on <em>Show reception shadows</em> to see the water this applies to. The other
+        has no reception estimate at all and stays <em>dark</em> — an absence of evidence is
+        never treated as evidence of absence.</p>
       <p>Now widen the max AIS gap past an hour. The same reports start covering the
         acquisition instant, reception rises, and the shadow lifts: one control moves both
         halves of the claim.</p>
